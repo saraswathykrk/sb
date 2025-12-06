@@ -41,7 +41,7 @@ RUN playwright install chromium
 COPY . .
 
 # Expose port
-EXPOSE 5000
+EXPOSE 5019
 
 # Run the app
-CMD ["gunicorn", "app_hybrid:app", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "120"]
+CMD ["gunicorn", "app_hybrid:app", "--bind", "0.0.0.0:5019", "--workers", "1", "--timeout", "120"]
