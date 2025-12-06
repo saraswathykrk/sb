@@ -1,0 +1,9 @@
+{
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "playwright install chromium && gunicorn app_hybrid:app",
+    "restartPolicyType": "ON_FAILURE"
+  }
+}
