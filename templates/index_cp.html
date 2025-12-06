@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Śrīmad-Bhāgavatam Verse Finder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .input-field {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .input-field label {
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .input-field input {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .input-field input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            display: none;
+        }
+
+        .result-section {
+            margin-bottom: 25px;
+        }
+
+        .result-section h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 5px;
+        }
+
+        .verse-text {
+            font-size: 1.2em;
+            line-height: 1.8;
+            color: #333;
+            font-style: italic;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .translation-text {
+            font-size: 1.1em;
+            line-height: 1.7;
+            color: #444;
+            background: #f1f3f5;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .purport-text {
+            font-size: 1em;
+            line-height: 1.8;
+            color: #555;
+            text-align: justify;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .word-meanings {
+            font-size: 0.95em;
+            line-height: 1.6;
+            color: #666;
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+        }
+
+        .reference {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: #764ba2;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .source-link {
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        .source-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .source-link a:hover {
+            text-decoration: underline;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #f5c6cb;
+            display: none;
+            margin-top: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .input-group {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🕉️ Śrīmad-Bhāgavatam Verse Finder</h1>
+            <p>Discover the wisdom of ancient Vedic literature</p>
+        </div>
+
+        <div class="card">
+            <form id="verseForm">
+                <div class="input-group">
+                    <div class="input-field">
+                        <label for="canto">Canto</label>
+                        <input type="number" id="canto" name="canto" min="1" max="12" required placeholder="1-12">
+                    </div>
+                    <div class="input-field">
+                        <label for="chapter">Chapter</label>
+                        <input type="number" id="chapter" name="chapter" min="1" required placeholder="e.g., 1">
+                    </div>
+                    <div class="input-field">
+                        <label for="verse">Verse</label>
+                        <input type="number" id="verse" name="verse" min="1" required placeholder="e.g., 1">
+                    </div>
+                </div>
+                <button type="submit" class="btn" id="fetchBtn">🔍 Fetch Verse</button>
+            </form>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p style="margin-top: 10px; color: #667eea;">Fetching verse...</p>
+            </div>
+
+            <div class="error" id="error"></div>
+        </div>
+
+        <div class="card result" id="result">
+            <div class="reference" id="reference"></div>
+            
+            <div class="result-section" id="verseSection" style="display: none;">
+                <h3>📜 Sanskrit Verse</h3>
+                <div class="verse-text" id="sanskritVerse"></div>
+            </div>
+
+            <div class="result-section" id="wordSection" style="display: none;">
+                <h3>📖 Word-for-Word Meanings</h3>
+                <div class="word-meanings" id="wordMeanings"></div>
+            </div>
+
+            <div class="result-section" id="translationSection" style="display: none;">
+                <h3>🌟 Translation</h3>
+                <div class="translation-text" id="translation"></div>
+            </div>
+
+            <div class="result-section" id="purportSection" style="display: none;">
+                <h3>💡 Purport</h3>
+                <div class="purport-text" id="purport"></div>
+            </div>
+
+            <div class="source-link">
+                <a href="#" id="sourceLink" target="_blank">📚 View on Vedabase.io</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('verseForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const canto = document.getElementById('canto').value;
+            const chapter = document.getElementById('chapter').value;
+            const verse = document.getElementById('verse').value;
+
+            // Show loading, hide result and error
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('fetchBtn').disabled = true;
+
+            try {
+                const response = await fetch('/fetch_verse', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ canto, chapter, verse })
+                });
+
+                const data = await response.json();
+
+                // Hide loading
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('fetchBtn').disabled = false;
+
+                if (data.success) {
+                    // Display reference
+                    document.getElementById('reference').textContent = data.reference;
+
+                    // Display Sanskrit verse
+                    if (data.sanskrit_verse) {
+                        document.getElementById('sanskritVerse').textContent = data.sanskrit_verse;
+                        document.getElementById('verseSection').style.display = 'block';
+                    } else {
+                        document.getElementById('verseSection').style.display = 'none';
+                    }
+
+                    // Display word meanings
+                    if (data.word_meanings) {
+                        document.getElementById('wordMeanings').textContent = data.word_meanings;
+                        document.getElementById('wordSection').style.display = 'block';
+                    } else {
+                        document.getElementById('wordSection').style.display = 'none';
+                    }
+
+                    // Display translation
+                    if (data.translation) {
+                        document.getElementById('translation').textContent = data.translation;
+                        document.getElementById('translationSection').style.display = 'block';
+                    } else {
+                        document.getElementById('translationSection').style.display = 'none';
+                    }
+
+                    // Display purport
+                    if (data.purport) {
+                        document.getElementById('purport').textContent = data.purport;
+                        document.getElementById('purportSection').style.display = 'block';
+                    } else {
+                        document.getElementById('purportSection').style.display = 'none';
+                    }
+
+                    // Set source link
+                    document.getElementById('sourceLink').href = data.url;
+
+                    // Show result
+                    document.getElementById('result').style.display = 'block';
+
+                    // Scroll to result
+                    document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    // Show error
+                    document.getElementById('error').textContent = data.error;
+                    document.getElementById('error').style.display = 'block';
+                }
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('fetchBtn').disabled = false;
+                document.getElementById('error').textContent = 'An error occurred. Please try again.';
+                document.getElementById('error').style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

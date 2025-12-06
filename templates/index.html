@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Śrīmad-Bhāgavatam Verse Finder</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .input-field label {
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+            display: block;
+        }
+
+        .input-field input {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            width: 100%;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            display: none;
+        }
+
+        .result-section {
+            margin-bottom: 25px;
+        }
+
+        .result-section h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 5px;
+        }
+
+        .devanagari-text {
+            font-size: 1.8em;
+            line-height: 2.2;
+            color: #333;
+            background: #fff9e6;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ff9800;
+            text-align: center;
+            font-family: 'Noto Sans Devanagari', serif;
+            font-weight: 600;
+        }
+
+        .verse-text {
+            font-size: 1.2em;
+            line-height: 1.8;
+            color: #333;
+            font-style: italic;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .word-meanings {
+            font-size: 0.95em;
+            line-height: 1.6;
+            color: #666;
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+        }
+
+        .translation-text {
+            font-size: 1.1em;
+            line-height: 1.7;
+            color: #444;
+            background: #f1f3f5;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .purport-text {
+            font-size: 1em;
+            line-height: 1.8;
+            color: #555;
+            text-align: justify;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .reference {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: #764ba2;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .source-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            margin-left: 10px;
+        }
+
+        .badge-database {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-web {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🕉️ Śrīmad-Bhāgavatam Verse Finder</h1>
+            <p>Complete verses with Devanagari, Sanskrit, and translations</p>
+        </div>
+
+        <div class="card">
+            <form id="verseForm">
+                <div class="input-group">
+                    <div class="input-field">
+                        <label for="canto">Canto</label>
+                        <input type="number" id="canto" name="canto" min="1" max="12" required placeholder="1-12" value="3">
+                    </div>
+                    <div class="input-field">
+                        <label for="chapter">Chapter</label>
+                        <input type="number" id="chapter" name="chapter" min="1" required placeholder="1" value="1">
+                    </div>
+                    <div class="input-field">
+                        <label for="verse">Verse</label>
+                        <input type="number" id="verse" name="verse" min="1" required placeholder="1" value="1">
+                    </div>
+                </div>
+                <button type="submit" class="btn" id="fetchBtn">🔍 Fetch Verse</button>
+            </form>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p style="margin-top: 10px; color: #667eea;">Fetching verse...</p>
+            </div>
+
+            <div class="error" id="error"></div>
+        </div>
+
+        <div class="card result" id="result">
+            <div class="reference" id="reference"></div>
+            
+            <!-- DEVANAGARI SECTION -->
+            <div class="result-section" id="devanagariSection">
+                <h3>🔱 Devanagari (Sanskrit Original)</h3>
+                <div class="devanagari-text" id="devanagariVerse"></div>
+            </div>
+
+            <!-- ROMANIZED SANSKRIT SECTION -->
+            <div class="result-section" id="verseSection">
+                <h3>📜 Sanskrit Verse (Romanized)</h3>
+                <div class="verse-text" id="sanskritVerse"></div>
+            </div>
+
+            <!-- WORD MEANINGS SECTION -->
+            <div class="result-section" id="wordSection">
+                <h3>📖 Word-for-Word Meanings</h3>
+                <div class="word-meanings" id="wordMeanings"></div>
+            </div>
+
+            <!-- TRANSLATION SECTION -->
+            <div class="result-section" id="translationSection">
+                <h3>🌟 Translation</h3>
+                <div class="translation-text" id="translation"></div>
+            </div>
+
+            <!-- PURPORT SECTION -->
+            <div class="result-section" id="purportSection">
+                <h3>💡 Purport</h3>
+                <div class="purport-text" id="purport"></div>
+            </div>
+
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="#" id="sourceLink" target="_blank" style="color: #667eea; text-decoration: none; font-weight: 600;">📚 View on Vedabase.io</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('verseForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const canto = document.getElementById('canto').value;
+            const chapter = document.getElementById('chapter').value;
+            const verse = document.getElementById('verse').value;
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('fetchBtn').disabled = true;
+
+            try {
+                const response = await fetch('/fetch_verse', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ canto, chapter, verse })
+                });
+
+                const data = await response.json();
+                console.log('Received data:', data); // DEBUG
+
+                document.getElementById('loading').style.display = 'none';
+
+                if (data.success) {
+                    // Show reference
+                    document.getElementById('reference').innerHTML = data.reference + 
+                        (data.source ? `<span class="source-badge ${data.source.includes('database') ? 'badge-database' : 'badge-web'}">${data.source}</span>` : '');
+
+                    // Show ALL sections - always visible now
+                    document.getElementById('devanagariVerse').textContent = data.devanagari_verse || '(Not available)';
+                    document.getElementById('sanskritVerse').textContent = data.sanskrit_verse || '(Not available)';
+                    document.getElementById('wordMeanings').textContent = data.word_meanings || '(Not available)';
+                    document.getElementById('translation').textContent = data.translation || '(Not available)';
+                    document.getElementById('purport').textContent = data.purport || '(Not available)';
+
+                    document.getElementById('sourceLink').href = data.url;
+                    document.getElementById('result').style.display = 'block';
+                    document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    document.getElementById('error').textContent = data.error;
+                    document.getElementById('error').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Fetch error:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').textContent = 'Error: ' + error.message;
+                document.getElementById('error').style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

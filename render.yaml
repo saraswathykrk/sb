@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: srimad-bhagavatam-app
+    runtime: python
+    buildCommand: pip install -r requirements.txt && playwright install chromium
+    startCommand: gunicorn app_hybrid:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0

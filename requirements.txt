@@ -1,0 +1,9 @@
+Flask==2.3.3
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml
+selenium==4.15.2
+webdriver-manager==4.0.1
+playwright
+gunicorn==21.2.0
+#python -m playwright install chromium
