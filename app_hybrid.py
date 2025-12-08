@@ -4,35 +4,18 @@ import sqlite3
 import os
 import time
 import re
-import psycopg2
-from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
-DB_PATH = 'srimad_bhagavatam.db'
-
-# Use PostgreSQL if DATABASE_URL exists, otherwise SQLite
-DATABASE_URL = os.environ.get('DATABASE_URL')
-
-def get_db_connection():
-    if DATABASE_URL:
-        # PostgreSQL
-        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
-        return conn
-    else:
-        # SQLite (local development)
-        import sqlite3
-        conn = sqlite3.connect('srimad_bhagavatam.db')
-        conn.row_factory = sqlite3.Row
-        return conn
+DB_PATH = '/tmp/srimad_bhagavatam.db'  # Use /tmp for ephemeral storage
 
 def init_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Check if using PostgreSQL or SQLite
-    if DATABASE_URL:
-        # PostgreSQL
-        cursor.execute("""
+    """Initialize database - runs on every startup"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        
+        # Always create table if not exists
+        c.execute("""
             CREATE TABLE IF NOT EXISTS verses (
                 canto INTEGER,
                 chapter INTEGER,
@@ -45,27 +28,19 @@ def init_db():
                 PRIMARY KEY (canto, chapter, verse)
             )
         """)
-    else:
-        # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS verses (
-                canto INTEGER,
-                chapter INTEGER,
-                verse INTEGER,
-                devanagari_verse TEXT,
-                sanskrit_verse TEXT,
-                word_meanings TEXT,
-                translation TEXT,
-                purport TEXT,
-                PRIMARY KEY (canto, chapter, verse)
-            )
-        """)
-    
-    conn.commit()
-    conn.close()
+        
+        conn.commit()
+        conn.close()
+        print("✅ Database initialized successfully")
+    except Exception as e:
+        print(f"❌ Database init error: {e}")
 
+def is_devanagari(text):
+    """Check if text contains Devanagari script"""
+    return bool(re.search(r'[\u0900-\u097F]', text))
 
 def fetch_from_vedabase(canto, chapter, verse):
+    """Fetch verse from vedabase.io"""
     try:
         url = f"https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/"
         print(f"🔍 Fetching: {url}")
@@ -74,7 +49,6 @@ def fetch_from_vedabase(canto, chapter, verse):
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
             
-            # Set timeout to 10 seconds
             page.set_default_timeout(10000)
             
             try:
@@ -86,48 +60,80 @@ def fetch_from_vedabase(canto, chapter, verse):
             full_text = page.inner_text('body')
             lines = full_text.split('\n')
             
-            # Quick extraction
             sb_idx = synonyms_idx = translation_idx = -1
             
             for i, line in enumerate(lines):
-                if re.match(r'ŚB \d+\.\d+\.\d+', line.strip()):
+                line_clean = line.strip()
+                
+                if re.match(r'ŚB \d+\.\d+\.\d+', line_clean):
                     sb_idx = i
-                elif line.strip().lower() == 'synonyms':
+                    print(f"📍 Found verse ref at line {i}")
+                
+                if line_clean.lower() == 'synonyms':
                     synonyms_idx = i
-                elif line.strip().lower() == 'translation':
+                    print(f"📍 Found 'Synonyms' at line {i}")
+                
+                if line_clean.lower() == 'translation':
                     translation_idx = i
+                    print(f"📍 Found 'Translation' at line {i}")
             
-            # Extract
-            devanagari = sanskrit = synonyms = translation = purport = ""
+            devanagari_verse = ""
+            sanskrit_verse = ""
+            word_meanings = ""
+            translation = ""
+            purport = ""
             
             if sb_idx > 0 and synonyms_idx > 0:
+                devanagari_lines = []
+                verse_lines = []
+                
                 for i in range(sb_idx + 1, synonyms_idx):
                     line = lines[i].strip()
-                    if line:
-                        if re.search(r'[\u0900-\u097F]', line):
-                            devanagari += line + '\n'
+                    if line and not line.startswith('Default') and not line.startswith('Dual'):
+                        if is_devanagari(line):
+                            devanagari_lines.append(line)
                         else:
-                            sanskrit += line + '\n'
+                            verse_lines.append(line)
+                
+                devanagari_verse = '\n'.join(devanagari_lines)
+                sanskrit_verse = '\n'.join(verse_lines)
+                
+                if devanagari_verse:
+                    print(f"✅ Devanagari: {devanagari_verse[:50]}...")
+                if sanskrit_verse:
+                    print(f"✅ Sanskrit: {sanskrit_verse[:50]}...")
             
             if synonyms_idx > 0 and translation_idx > 0:
-                synonyms = ' '.join(lines[synonyms_idx+1:translation_idx])
+                synonym_lines = []
+                for i in range(synonyms_idx + 1, translation_idx):
+                    line = lines[i].strip()
+                    if line:
+                        synonym_lines.append(line)
+                word_meanings = ' '.join(synonym_lines)
+                if word_meanings:
+                    print(f"✅ Synonyms: {word_meanings[:50]}...")
             
             if translation_idx > 0:
-                trans_lines = []
-                for i in range(translation_idx+1, len(lines)):
-                    if 'CHAPTER' in lines[i] or lines[i].startswith('Text'):
+                translation_lines = []
+                for i in range(translation_idx + 1, min(translation_idx + 30, len(lines))):
+                    line = lines[i].strip()
+                    if line and not line.startswith('CHAPTER') and not line.startswith('Text'):
+                        translation_lines.append(line)
+                    if line.startswith('CHAPTER') or line.startswith('Text'):
                         break
-                    trans_lines.append(lines[i].strip())
-                translation = ' '.join(trans_lines[:20])  # Limit
+                
+                translation = ' '.join(translation_lines)
+                if translation:
+                    print(f"✅ Translation: {translation[:50]}...")
             
             browser.close()
             
-            print(f"✅ Extracted - Dev: {bool(devanagari)}, San: {bool(sanskrit)}, Syn: {bool(synonyms)}, Trans: {bool(translation)}")
+            print(f"✅ Extraction complete")
             
             return {
-                'devanagari_verse': devanagari.strip(),
-                'sanskrit_verse': sanskrit.strip(),
-                'word_meanings': synonyms.strip(),
+                'devanagari_verse': devanagari_verse.strip(),
+                'sanskrit_verse': sanskrit_verse.strip(),
+                'word_meanings': word_meanings.strip(),
                 'translation': translation.strip(),
                 'purport': purport,
                 'source': 'vedabase.io (fetched)'
@@ -135,7 +141,88 @@ def fetch_from_vedabase(canto, chapter, verse):
             
     except Exception as e:
         print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
         return None
+
+def get_from_database(canto, chapter, verse):
+    """Get from database"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        
+        c.execute('''SELECT devanagari_verse, sanskrit_verse, word_meanings, translation, purport
+                     FROM verses WHERE canto=? AND chapter=? AND verse=?''',
+                  (canto, chapter, verse))
+        
+        result = c.fetchone()
+        conn.close()
+        
+        if result:
+            print(f"✅ Found in database: SB {canto}.{chapter}.{verse}")
+            return {
+                'devanagari_verse': result[0] or "",
+                'sanskrit_verse': result[1] or "",
+                'word_meanings': result[2] or "",
+                'translation': result[3] or "",
+                'purport': result[4] or "",
+                'source': 'database (cached)'
+            }
+        return None
+            
+    except Exception as e:
+        print(f"❌ Database error: {e}")
+        return None
+
+def save_to_database(canto, chapter, verse, devanagari_verse, sanskrit_verse, word_meanings, translation, purport):
+    """Save to database"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        
+        c.execute('''INSERT OR REPLACE INTO verses 
+                     (canto, chapter, verse, devanagari_verse, sanskrit_verse, word_meanings, translation, purport)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (canto, chapter, verse, devanagari_verse, sanskrit_verse, word_meanings, translation, purport))
+        
+        conn.commit()
+        conn.close()
+        print(f"💾 Saved: SB {canto}.{chapter}.{verse}")
+        return True
+    except Exception as e:
+        print(f"❌ Save error: {e}")
+        return False
+
+def fetch_verse_hybrid(canto, chapter, verse):
+    """Hybrid approach"""
+    verse_ref = f"SB {canto}.{chapter}.{verse}"
+    
+    db_result = get_from_database(canto, chapter, verse)
+    if db_result:
+        return {
+            'success': True,
+            'reference': verse_ref,
+            **db_result,
+            'url': f'https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/'
+        }
+    
+    web_result = fetch_from_vedabase(canto, chapter, verse)
+    if web_result:
+        save_to_database(canto, chapter, verse, web_result['devanagari_verse'], 
+                        web_result['sanskrit_verse'], web_result['word_meanings'],
+                        web_result['translation'], web_result['purport'])
+        
+        return {
+            'success': True,
+            'reference': verse_ref,
+            **web_result,
+            'url': f'https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/'
+        }
+    
+    return {
+        'success': False,
+        'error': f'Could not fetch verse {verse_ref}'
+    }
 
 @app.route('/')
 def index():
@@ -151,63 +238,21 @@ def get_verse():
         
         print(f"\n📥 Request: SB {canto}.{chapter}.{verse}")
         
-        # Try database first
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('SELECT devanagari_verse, sanskrit_verse, word_meanings, translation, purport FROM verses WHERE canto=? AND chapter=? AND verse=?',
-                  (canto, chapter, verse))
-        result = c.fetchone()
-        conn.close()
-        
-        if result:
-            print("✅ From database")
-            return jsonify({
-                'success': True,
-                'reference': f'SB {canto}.{chapter}.{verse}',
-                'devanagari_verse': result[0] or '',
-                'sanskrit_verse': result[1] or '',
-                'word_meanings': result[2] or '',
-                'translation': result[3] or '',
-                'purport': result[4] or '',
-                'url': f'https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/',
-                'source': 'database (cached)'
-            })
-        
-        # Fetch from web
-        web_result = fetch_from_vedabase(canto, chapter, verse)
-        
-        if web_result:
-            # Save to DB
-            try:
-                conn = sqlite3.connect(DB_PATH)
-                c = conn.cursor()
-                c.execute('INSERT OR REPLACE INTO verses VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                          (canto, chapter, verse, web_result['devanagari_verse'], 
-                           web_result['sanskrit_verse'], web_result['word_meanings'],
-                           web_result['translation'], web_result['purport']))
-                conn.commit()
-                conn.close()
-            except:
-                pass
-            
-            return jsonify({
-                'success': True,
-                'reference': f'SB {canto}.{chapter}.{verse}',
-                **web_result,
-                'url': f'https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/'
-            })
-        
-        return jsonify({'success': False, 'error': 'Could not fetch verse'})
+        result = fetch_verse_hybrid(canto, chapter, verse)
+        return jsonify(result)
         
     except Exception as e:
         print(f"❌ Route error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
 
+# Initialize database on startup
+print("="*70)
+print("🕉️  Srimad Bhagavatam Verse Finder - Initializing...")
+print("="*70)
+init_db()
+
 if __name__ == '__main__':
-    init_db()
-    print("="*70)
-    print("🕉️  Srimad Bhagavatam Verse Finder")
-    print("="*70)
-    #app.run(debug=True, host='0.0.0.0', port=5019)
     port = int(os.environ.get('PORT', 5019))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=False, host='0.0.0.0', port=port)
