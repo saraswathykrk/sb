@@ -43,95 +43,143 @@ def is_devanagari(text):
     return bool(re.search(r'[\u0900-\u097F]', text))
 
 def fetch_from_vedabase(canto, chapter, verse):
-    """Fetch verse from vedabase.io"""
+    """Fetch verse from vedabase.io with robust extraction"""
     try:
         url = f"https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/"
         print(f"🔍 Fetching: {url}")
         
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
+            context = browser.new_context(
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            )
+            page = context.new_page()
             
-            page.set_default_timeout(10000)
+            # Load page with longer timeout
+            page.goto(url, wait_until='networkidle', timeout=30000)
             
+            # Wait for content to load
             try:
-                page.goto(url, wait_until='domcontentloaded')
-                time.sleep(2)
-            except PlaywrightTimeout:
-                print("⚠️ Page load timeout - trying anyway...")
+                page.wait_for_selector('body', timeout=10000)
+                time.sleep(5)  # Extra wait for dynamic content
+            except:
+                print("⚠️ Timeout waiting for content")
             
+            # Get full page text
             full_text = page.inner_text('body')
-            lines = full_text.split('\n')
             
+            # Save to file for debugging
+            debug_file = f'/tmp/page_debug_{canto}_{chapter}_{verse}.txt'
+            try:
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    f.write(full_text)
+                print(f"📝 Saved debug file: {debug_file}")
+            except:
+                pass
+            
+            print(f"📄 Page length: {len(full_text)} characters")
+            print(f"📄 First 200 chars: {full_text[:200]}")
+            
+            lines = full_text.split('\n')
+            print(f"📄 Total lines: {len(lines)}")
+            
+            # Find key sections
             sb_idx = synonyms_idx = translation_idx = -1
             
             for i, line in enumerate(lines):
-                line_clean = line.strip()
+                line_lower = line.strip().lower()
                 
-                if re.match(r'ŚB \d+\.\d+\.\d+', line_clean):
+                # Look for verse reference
+                if re.match(r'[śŚ]b \d+\.\d+\.\d+', line.strip(), re.IGNORECASE):
                     sb_idx = i
-                    print(f"📍 Found verse ref at line {i}")
+                    print(f"📍 Found verse ref at line {i}: {line.strip()}")
                 
-                if line_clean.lower() == 'synonyms':
+                # Look for Synonyms
+                if line_lower == 'synonyms':
                     synonyms_idx = i
                     print(f"📍 Found 'Synonyms' at line {i}")
                 
-                if line_clean.lower() == 'translation':
+                # Look for Translation
+                if line_lower == 'translation':
                     translation_idx = i
                     print(f"📍 Found 'Translation' at line {i}")
             
+            # Initialize results
             devanagari_verse = ""
             sanskrit_verse = ""
             word_meanings = ""
             translation = ""
             purport = ""
             
+            # Extract verse text (between SB ref and Synonyms)
             if sb_idx > 0 and synonyms_idx > 0:
+                print(f"🔍 Extracting verse between lines {sb_idx} and {synonyms_idx}")
+                
                 devanagari_lines = []
                 verse_lines = []
                 
                 for i in range(sb_idx + 1, synonyms_idx):
                     line = lines[i].strip()
-                    if line and not line.startswith('Default') and not line.startswith('Dual'):
+                    # Skip navigation/UI elements
+                    if line and not any(skip in line for skip in ['Default View', 'Dual Language', 'Advanced View', 'Show in']):
                         if is_devanagari(line):
                             devanagari_lines.append(line)
-                        else:
+                            print(f"  📜 Devanagari line {i}: {line[:50]}")
+                        elif len(line) > 3:  # Skip very short lines
                             verse_lines.append(line)
+                            print(f"  📝 Sanskrit line {i}: {line[:50]}")
                 
                 devanagari_verse = '\n'.join(devanagari_lines)
                 sanskrit_verse = '\n'.join(verse_lines)
                 
-                if devanagari_verse:
-                    print(f"✅ Devanagari: {devanagari_verse[:50]}...")
-                if sanskrit_verse:
-                    print(f"✅ Sanskrit: {sanskrit_verse[:50]}...")
+                print(f"✅ Devanagari: {len(devanagari_verse)} chars")
+                print(f"✅ Sanskrit: {len(sanskrit_verse)} chars")
+            else:
+                print(f"⚠️ Could not find verse boundaries. sb_idx={sb_idx}, synonyms_idx={synonyms_idx}")
             
+            # Extract synonyms
             if synonyms_idx > 0 and translation_idx > 0:
+                print(f"🔍 Extracting synonyms between lines {synonyms_idx} and {translation_idx}")
+                
                 synonym_lines = []
                 for i in range(synonyms_idx + 1, translation_idx):
                     line = lines[i].strip()
-                    if line:
+                    if line and len(line) > 3:
                         synonym_lines.append(line)
+                
                 word_meanings = ' '.join(synonym_lines)
-                if word_meanings:
-                    print(f"✅ Synonyms: {word_meanings[:50]}...")
+                print(f"✅ Synonyms: {len(word_meanings)} chars")
+            else:
+                print(f"⚠️ Could not find synonyms. synonyms_idx={synonyms_idx}, translation_idx={translation_idx}")
             
+            # Extract translation
             if translation_idx > 0:
+                print(f"🔍 Extracting translation from line {translation_idx}")
+                
                 translation_lines = []
-                for i in range(translation_idx + 1, min(translation_idx + 30, len(lines))):
+                for i in range(translation_idx + 1, min(translation_idx + 50, len(lines))):
                     line = lines[i].strip()
-                    if line and not line.startswith('CHAPTER') and not line.startswith('Text'):
-                        translation_lines.append(line)
-                    if line.startswith('CHAPTER') or line.startswith('Text'):
+                    
+                    # Stop at chapter headings or next section
+                    if any(stop in line for stop in ['CHAPTER', 'Text ', 'Purport']):
                         break
+                    
+                    if line and len(line) > 5:
+                        translation_lines.append(line)
                 
                 translation = ' '.join(translation_lines)
-                if translation:
-                    print(f"✅ Translation: {translation[:50]}...")
+                print(f"✅ Translation: {len(translation)} chars")
+            else:
+                print(f"⚠️ Could not find translation. translation_idx={translation_idx}")
             
             browser.close()
             
-            print(f"✅ Extraction complete")
+            # Final summary
+            print(f"\n📊 EXTRACTION SUMMARY:")
+            print(f"  Devanagari: {len(devanagari_verse)} chars")
+            print(f"  Sanskrit: {len(sanskrit_verse)} chars")
+            print(f"  Synonyms: {len(word_meanings)} chars")
+            print(f"  Translation: {len(translation)} chars")
             
             return {
                 'devanagari_verse': devanagari_verse.strip(),
@@ -143,7 +191,7 @@ def fetch_from_vedabase(canto, chapter, verse):
             }
             
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Error fetching verse: {e}")
         import traceback
         traceback.print_exc()
         return None
