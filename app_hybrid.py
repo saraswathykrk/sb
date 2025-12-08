@@ -8,6 +8,16 @@ import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 from langdetect import detect
 
+import assemblyai as aai
+
+# AssemblyAI API Key (add to environment variables on Render)
+ASSEMBLYAI_API_KEY = os.environ.get('ASSEMBLYAI_API_KEY', '')
+
+# Configure AssemblyAI
+if ASSEMBLYAI_API_KEY:
+    aai.settings.api_key = ASSEMBLYAI_API_KEY
+
+    
 app = Flask(__name__)
 DB_PATH = '/tmp/srimad_bhagavatam.db'
 
@@ -711,9 +721,377 @@ def get_youtube_transcript(video_id):
         import traceback
         traceback.print_exc()
         return None
+
+
+def download_audio_from_youtube(video_id):
+    """Download audio from YouTube video"""
+    try:
+        print(f"🎵 Downloading audio for video: {video_id}")
         
+        output_path = f"/tmp/audio_{video_id}.mp3"
+        
+        # Check if already downloaded
+        if os.path.exists(output_path):
+            print(f"✅ Audio already downloaded")
+            return output_path
+        
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        
+        # Download audio using yt-dlp
+        cmd = [
+            'yt-dlp',
+            '-x',  # Extract audio
+            '--audio-format', 'mp3',
+            '--audio-quality', '0',  # Best quality
+            '-o', output_path,
+            video_url
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+        if result.returncode == 0 and os.path.exists(output_path):
+            print(f"✅ Audio downloaded: {os.path.getsize(output_path) / (1024*1024):.2f} MB")
+            return output_path
+        else:
+            print(f"❌ Download failed: {result.stderr}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error downloading audio: {e}")
+        return None
+
+def transcribe_audio_assemblyai(audio_path, language='ta'):
+    """Transcribe audio using AssemblyAI"""
+    try:
+        if not ASSEMBLYAI_API_KEY:
+            print("⚠️ AssemblyAI API key not configured")
+            return None
+        
+        print(f"🎤 Transcribing audio with AssemblyAI (language: {language})...")
+        
+        # Language code mapping
+        lang_map = {
+            'ta': 'ta',  # Tamil
+            'hi': 'hi',  # Hindi
+            'te': 'te',  # Telugu
+            'kn': 'kn',  # Kannada
+            'ml': 'ml',  # Malayalam
+            'en': 'en'   # English
+        }
+        
+        lang_code = lang_map.get(language, 'ta')
+        
+        # Configure transcription
+        config = aai.TranscriptionConfig(
+            language_code=lang_code,
+            punctuate=True,
+            format_text=True
+        )
+        
+        # Create transcriber
+        transcriber = aai.Transcriber()
+        
+        # Transcribe
+        transcript = transcriber.transcribe(audio_path, config=config)
+        
+        if transcript.status == aai.TranscriptStatus.error:
+            print(f"❌ Transcription error: {transcript.error}")
+            return None
+        
+        print(f"✅ Transcription complete: {len(transcript.text)} chars")
+        
+        return {
+            'text': transcript.text,
+            'language': lang_code,
+            'confidence': transcript.confidence if hasattr(transcript, 'confidence') else None
+        }
+        
+    except Exception as e:
+        print(f"❌ Transcription error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def transcribe_audio_deepgram(audio_path, language='ta'):
+    """Transcribe audio using Deepgram (alternative)"""
+    try:
+        DEEPGRAM_API_KEY = os.environ.get('DEEPGRAM_API_KEY', '')
+        
+        if not DEEPGRAM_API_KEY:
+            print("⚠️ Deepgram API key not configured")
+            return None
+        
+        print(f"🎤 Transcribing with Deepgram (language: {language})...")
+        
+        url = "https://api.deepgram.com/v1/listen"
+        
+        # Language mapping
+        lang_map = {
+            'ta': 'ta',
+            'hi': 'hi',
+            'te': 'te',
+            'kn': 'kn',
+            'ml': 'ml',
+            'en': 'en-US'
+        }
+        
+        headers = {
+            'Authorization': f'Token {DEEPGRAM_API_KEY}',
+            'Content-Type': 'audio/mp3'
+        }
+        
+        params = {
+            'language': lang_map.get(language, 'ta'),
+            'punctuate': 'true',
+            'model': 'general'
+        }
+        
+        with open(audio_path, 'rb') as audio_file:
+            response = requests.post(url, headers=headers, params=params, data=audio_file, timeout=300)
+        
+        if response.status_code == 200:
+            result = response.json()
+            transcript_text = result['results']['channels'][0]['alternatives'][0]['transcript']
+            print(f"✅ Deepgram transcription: {len(transcript_text)} chars")
+            
+            return {
+                'text': transcript_text,
+                'language': language
+            }
+        else:
+            print(f"❌ Deepgram error: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Deepgram error: {e}")
+        return None
+
+def get_or_create_transcript(video_id, language='ta'):
+    """Get transcript - try YouTube first, then generate from audio"""
+    try:
+        print(f"\n📝 Getting transcript for video: {video_id}")
+        
+        # Try YouTube transcript first (fastest)
+        youtube_transcript = get_youtube_transcript(video_id)
+        
+        if youtube_transcript:
+            print(f"✅ Found YouTube transcript")
+            return youtube_transcript
+        
+        print(f"⚠️ No YouTube transcript - generating from audio...")
+        
+        # Download audio
+        audio_path = download_audio_from_youtube(video_id)
+        
+        if not audio_path:
+            return None
+        
+        # Try AssemblyAI first
+        transcript = transcribe_audio_assemblyai(audio_path, language)
+        
+        # Fallback to Deepgram if AssemblyAI fails
+        if not transcript:
+            print("⚠️ AssemblyAI failed, trying Deepgram...")
+            transcript = transcribe_audio_deepgram(audio_path, language)
+        
+        # Clean up audio file
+        try:
+            os.remove(audio_path)
+            print(f"🗑️ Cleaned up audio file")
+        except:
+            pass
+        
+        return transcript
+        
+    except Exception as e:
+        print(f"❌ Error getting transcript: {e}")
+        return None
+
+
+# def get_chapter_meaning(canto, chapter):
+#     """Get chapter meaning from YouTube"""
+#     try:
+#         # Check database first
+#         conn = sqlite3.connect(DB_PATH)
+#         c = conn.cursor()
+        
+#         c.execute('''SELECT video_id, transcript, translation 
+#                      FROM chapter_meanings 
+#                      WHERE canto=? AND chapter=?''', (canto, chapter))
+#         result = c.fetchone()
+#         conn.close()
+        
+#         if result:
+#             print(f"✅ Chapter meaning from database")
+#             return {
+#                 'success': True,
+#                 'video_id': result[0],
+#                 'transcript': result[1],
+#                 'translation': result[2],
+#                 'source': 'database (cached)'
+#             }
+        
+#         # Get video mapping
+#         video_id = find_video_for_chapter(canto, chapter)
+        
+#         if not video_id:
+#             # Show available mappings for debugging
+#             mapping = get_video_mapping()
+#             available_cantos = sorted(set(c for c, ch in mapping.keys()))
+            
+#             return {
+#                 'success': False,
+#                 'error': f'No video found for Canto {canto}, Chapter {chapter}.\n\nAvailable Cantos in playlist: {available_cantos}\n\nPlease check if the video exists in the playlist.'
+#             }
+        
+#         print(f"✅ Found video ID: {video_id}")
+        
+#         # Get transcript
+#         transcript_data = get_youtube_transcript(video_id)
+        
+#         if not transcript_data:
+#             return {
+#                 'success': False,
+#                 'error': f'Could not fetch transcript for video ID: {video_id}\n\nPossible reasons:\n1. Video does not have captions/transcripts enabled\n2. Video is private or unavailable\n3. Transcripts are disabled for this video\n\nVideo URL: https://www.youtube.com/watch?v={video_id}\n\nPlease check if the video has captions enabled on YouTube.'
+#             }
+        
+#         original_text = transcript_data['text']
+#         language = transcript_data['language']
+        
+#         print(f"📝 Original: {len(original_text)} chars, language: {language}")
+        
+#         # Translate if needed
+#         translated_text = original_text
+        
+#         if language in ['ta', 'hi', 'te', 'kn', 'ml'] and language != 'en':
+#             print(f"🔄 Translating from {language}...")
+            
+#             translated_text = translate_text_cascade(original_text, language)
+            
+#             if not translated_text:
+#                 translated_text = f"[Translation failed - showing original text]\n\n{original_text}"
+        
+#         # Save to database
+#         try:
+#             conn = sqlite3.connect(DB_PATH)
+#             c = conn.cursor()
+#             c.execute('''INSERT OR REPLACE INTO chapter_meanings 
+#                          (canto, chapter, video_id, transcript, translation) 
+#                          VALUES (?, ?, ?, ?, ?)''',
+#                       (canto, chapter, video_id, original_text, translated_text))
+#             conn.commit()
+#             conn.close()
+#             print(f"💾 Saved to database")
+#         except Exception as e:
+#             print(f"⚠️ Database save error: {e}")
+        
+#         return {
+#             'success': True,
+#             'video_id': video_id,
+#             'transcript': original_text,
+#             'translation': translated_text,
+#             'language': language,
+#             'source': 'YouTube (fetched & translated)'
+#         }
+        
+#     except Exception as e:
+#         print(f"❌ Error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return {
+#             'success': False,
+#             'error': f'Error: {str(e)}\n\nPlease check Render logs for details.'
+#         }
+
+# def get_chapter_meaning(canto, chapter):
+#     """Get chapter meaning from YouTube"""
+#     try:
+#         # Check database first
+#         conn = sqlite3.connect(DB_PATH)
+#         c = conn.cursor()
+        
+#         c.execute('''SELECT video_id, transcript, translation 
+#                      FROM chapter_meanings 
+#                      WHERE canto=? AND chapter=?''', (canto, chapter))
+#         result = c.fetchone()
+#         conn.close()
+        
+#         if result and result[1]:  # Has transcript
+#             return {
+#                 'success': True,
+#                 'video_id': result[0],
+#                 'transcript': result[1],
+#                 'translation': result[2],
+#                 'source': 'database (cached)'
+#             }
+        
+#         # Get video ID
+#         video_id = find_video_for_chapter(canto, chapter)
+        
+#         if not video_id:
+#             return {
+#                 'success': False,
+#                 'error': f'No video found for Canto {canto}, Chapter {chapter}'
+#             }
+        
+#         # Try to get transcript
+#         transcript_data = get_youtube_transcript(video_id)
+        
+#         if not transcript_data:
+#             # No transcript available - return video link anyway
+#             return {
+#                 'success': True,
+#                 'video_id': video_id,
+#                 'transcript': '',
+#                 'translation': '',
+#                 'no_transcript': True,
+#                 'message': f'This video does not have captions/transcripts enabled on YouTube. You can still watch the video directly.',
+#                 'source': 'YouTube (no transcript)'
+#             }
+        
+#         # Has transcript - translate if needed
+#         original_text = transcript_data['text']
+#         language = transcript_data['language']
+        
+#         translated_text = original_text
+        
+#         if language in ['ta', 'hi', 'te', 'kn', 'ml'] and language != 'en':
+#             translated_text = translate_text_cascade(original_text, language)
+            
+#             if not translated_text:
+#                 translated_text = original_text
+        
+#         # Save to database
+#         try:
+#             conn = sqlite3.connect(DB_PATH)
+#             c = conn.cursor()
+#             c.execute('''INSERT OR REPLACE INTO chapter_meanings 
+#                          (canto, chapter, video_id, transcript, translation) 
+#                          VALUES (?, ?, ?, ?, ?)''',
+#                       (canto, chapter, video_id, original_text, translated_text))
+#             conn.commit()
+#             conn.close()
+#         except:
+#             pass
+        
+#         return {
+#             'success': True,
+#             'video_id': video_id,
+#             'transcript': original_text,
+#             'translation': translated_text,
+#             'language': language,
+#             'source': 'YouTube (fetched & translated)'
+#         }
+        
+#     except Exception as e:
+#         print(f"❌ Error: {e}")
+#         return {
+#             'success': False,
+#             'error': str(e)
+#         }
+
 def get_chapter_meaning(canto, chapter):
-    """Get chapter meaning from YouTube"""
+    """Get chapter meaning - generates transcript from audio if needed"""
     try:
         # Check database first
         conn = sqlite3.connect(DB_PATH)
@@ -725,7 +1103,7 @@ def get_chapter_meaning(canto, chapter):
         result = c.fetchone()
         conn.close()
         
-        if result:
+        if result and result[1]:
             print(f"✅ Chapter meaning from database")
             return {
                 'success': True,
@@ -735,45 +1113,45 @@ def get_chapter_meaning(canto, chapter):
                 'source': 'database (cached)'
             }
         
-        # Get video mapping
+        # Get video ID
         video_id = find_video_for_chapter(canto, chapter)
         
         if not video_id:
-            # Show available mappings for debugging
-            mapping = get_video_mapping()
-            available_cantos = sorted(set(c for c, ch in mapping.keys()))
-            
             return {
                 'success': False,
-                'error': f'No video found for Canto {canto}, Chapter {chapter}.\n\nAvailable Cantos in playlist: {available_cantos}\n\nPlease check if the video exists in the playlist.'
+                'error': f'No video found for Canto {canto}, Chapter {chapter}'
             }
         
-        print(f"✅ Found video ID: {video_id}")
+        print(f"✅ Found video: {video_id}")
         
-        # Get transcript
-        transcript_data = get_youtube_transcript(video_id)
+        # Detect likely language from canto
+        # (You can improve this by checking video title)
+        likely_language = 'ta'  # Default to Tamil
+        
+        # Get or create transcript
+        transcript_data = get_or_create_transcript(video_id, likely_language)
         
         if not transcript_data:
             return {
                 'success': False,
-                'error': f'Could not fetch transcript for video ID: {video_id}\n\nPossible reasons:\n1. Video does not have captions/transcripts enabled\n2. Video is private or unavailable\n3. Transcripts are disabled for this video\n\nVideo URL: https://www.youtube.com/watch?v={video_id}\n\nPlease check if the video has captions enabled on YouTube.'
+                'error': f'Could not get or generate transcript for this video.\n\nVideo URL: https://www.youtube.com/watch?v={video_id}\n\nPossible reasons:\n1. Video is unavailable\n2. Audio quality is too poor\n3. API quota exceeded\n\nPlease try again later or watch the video directly.'
             }
         
         original_text = transcript_data['text']
         language = transcript_data['language']
         
-        print(f"📝 Original: {len(original_text)} chars, language: {language}")
+        print(f"📝 Got transcript: {len(original_text)} chars, language: {language}")
         
         # Translate if needed
         translated_text = original_text
         
         if language in ['ta', 'hi', 'te', 'kn', 'ml'] and language != 'en':
-            print(f"🔄 Translating from {language}...")
+            print(f"🔄 Translating from {language} to English...")
             
             translated_text = translate_text_cascade(original_text, language)
             
             if not translated_text:
-                translated_text = f"[Translation failed - showing original text]\n\n{original_text}"
+                translated_text = original_text + "\n\n[Translation unavailable]"
         
         # Save to database
         try:
@@ -786,8 +1164,8 @@ def get_chapter_meaning(canto, chapter):
             conn.commit()
             conn.close()
             print(f"💾 Saved to database")
-        except Exception as e:
-            print(f"⚠️ Database save error: {e}")
+        except:
+            pass
         
         return {
             'success': True,
@@ -795,7 +1173,7 @@ def get_chapter_meaning(canto, chapter):
             'transcript': original_text,
             'translation': translated_text,
             'language': language,
-            'source': 'YouTube (fetched & translated)'
+            'source': 'Auto-transcribed from audio & translated'
         }
         
     except Exception as e:
@@ -804,8 +1182,9 @@ def get_chapter_meaning(canto, chapter):
         traceback.print_exc()
         return {
             'success': False,
-            'error': f'Error: {str(e)}\n\nPlease check Render logs for details.'
+            'error': f'Error: {str(e)}'
         }
+
 
 # ==================== ROUTES ====================
 

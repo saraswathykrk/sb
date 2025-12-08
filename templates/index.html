@@ -401,10 +401,20 @@
             const canto = document.getElementById('canto').value;
             const chapter = document.getElementById('chapter').value;
             
-            // Show modal
+            // Show modal with progress
             document.getElementById('chapterModal').style.display = 'block';
             document.getElementById('modalTitle').textContent = `Canto ${canto}, Chapter ${chapter} - Meaning`;
-            document.getElementById('modalContent').innerHTML = '<div class="spinner" style="margin: 50px auto;"></div><p style="text-align: center; color: #667eea;">Fetching chapter meaning from YouTube...</p>';
+            document.getElementById('modalContent').innerHTML = `
+                <div class="spinner" style="margin: 50px auto;"></div>
+                <p style="text-align: center; color: #667eea; margin-top: 20px;">
+                    <strong>Processing video...</strong><br><br>
+                    This may take 3-5 minutes for first-time processing:<br>
+                    1️⃣ Downloading audio from YouTube...<br>
+                    2️⃣ Transcribing with AI (Whisper)...<br>
+                    3️⃣ Translating to English...<br><br>
+                    <em>Next time will be instant from cache! ⚡</em>
+                </p>
+            `;
             document.getElementById('youtubeLink').style.display = 'none';
             
             try {
@@ -415,15 +425,13 @@
                 });
                 
                 const data = await response.json();
-                console.log('Chapter meaning:', data);
                 
                 if (data.success) {
                     const contentDiv = document.getElementById('modalContent');
                     
-                    // Show translation (or original if English)
                     contentDiv.innerHTML = `
                         <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 15px;">
-                            <h3 style="color: #667eea; margin-bottom: 10px;">📝 English Translation:</h3>
+                            <h3 style="color: #667eea; margin-bottom: 10px;">📝 Chapter Explanation (English):</h3>
                             <p style="line-height: 1.8; white-space: pre-wrap;">${data.translation}</p>
                         </div>
                         ${data.transcript !== data.translation ? `
@@ -437,19 +445,13 @@
                         </p>
                     `;
                     
-                    // Show YouTube link
-                    if (data.video_id) {
-                        document.getElementById('youtubeLink').style.display = 'block';
-                        document.querySelector('#youtubeLink a').href = `https://www.youtube.com/watch?v=${data.video_id}`;
-                    }
+                    document.getElementById('youtubeLink').style.display = 'block';
+                    document.querySelector('#youtubeLink a').href = `https://www.youtube.com/watch?v=${data.video_id}`;
                 } else {
                     document.getElementById('modalContent').innerHTML = `
                         <div style="background: #f8d7da; color: #721c24; padding: 20px; border-radius: 8px;">
                             <strong>Error:</strong> ${data.error}
                         </div>
-                        <p style="margin-top: 15px; color: #666;">
-                            Note: You need to add video mappings in the code for this feature to work.
-                        </p>
                     `;
                 }
                 
