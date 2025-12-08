@@ -362,6 +362,7 @@ def build_video_mapping():
         traceback.print_exc()
         return {}
         
+               
 @app.route('/debug/mapping', methods=['GET'])
 def debug_mapping():
     """Debug endpoint to see video mappings"""
