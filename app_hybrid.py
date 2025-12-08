@@ -240,16 +240,30 @@ _VIDEO_MAPPING_CACHE = None
 def build_video_mapping():
     """Build video mapping"""
     try:
+        # Check cache
         if os.path.exists(MAPPING_CACHE_FILE):
-            with open(MAPPING_CACHE_FILE, 'r') as f:
-                cached = json.load(f)
-                if time.time() - cached.get('timestamp', 0) < 7 * 24 * 3600:
-                    return cached.get('mapping', {})
+            try:
+                with open(MAPPING_CACHE_FILE, 'r') as f:
+                    cached = json.load(f)
+                    if time.time() - cached.get('timestamp', 0) < 7 * 24 * 3600:
+                        # Convert string keys back to tuple keys
+                        mapping = {}
+                        for key_str, video_id in cached.get('mapping', {}).items():
+                            # Parse "(3, 1)" back to (3, 1)
+                            canto, chapter = key_str.strip('()').split(',')
+                            mapping[(int(canto.strip()), int(chapter.strip()))] = video_id
+                        print(f"✅ Loaded {len(mapping)} videos from cache")
+                        return mapping
+            except Exception as e:
+                print(f"⚠️ Cache load error: {e}")
         
+        # Fetch from YouTube
+        print("📺 Fetching playlist from YouTube...")
         cmd = ['yt-dlp', '--dump-json', '--flat-playlist', '--skip-download', PLAYLIST_URL]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         
         if result.returncode != 0:
+            print(f"❌ yt-dlp failed: {result.stderr}")
             return {}
         
         mapping = {}
@@ -260,22 +274,40 @@ def build_video_mapping():
                     video_id = video_data.get('id')
                     title = video_data.get('title', '').lower()
                     
+                    # Parse title for canto.chapter
                     match = re.search(r'(\d+)\.(\d+)', title)
                     if match:
                         canto = int(match.group(1))
                         chapter = int(match.group(2))
                         if 1 <= canto <= 12:
                             mapping[(canto, chapter)] = video_id
-                except:
+                            print(f"  ✅ Mapped: Canto {canto}.{chapter} → {video_id}")
+                except Exception as e:
+                    print(f"⚠️ Parse error: {e}")
                     continue
         
-        with open(MAPPING_CACHE_FILE, 'w') as f:
-            json.dump({'timestamp': time.time(), 'mapping': mapping}, f)
+        print(f"📊 Total mapped: {len(mapping)} videos")
+        
+        # Save to cache - convert tuple keys to strings for JSON
+        try:
+            cache_data = {
+                'timestamp': time.time(),
+                'mapping': {f"({c},{ch})": vid for (c, ch), vid in mapping.items()}
+            }
+            with open(MAPPING_CACHE_FILE, 'w') as f:
+                json.dump(cache_data, f)
+            print(f"💾 Saved to cache")
+        except Exception as e:
+            print(f"⚠️ Cache save error: {e}")
         
         return mapping
-    except:
+        
+    except Exception as e:
+        print(f"❌ Mapping error: {e}")
+        import traceback
+        traceback.print_exc()
         return {}
-
+        
 # def get_video_mapping():
 #     """Get cached mapping"""
 #     global _VIDEO_MAPPING_CACHE
@@ -291,7 +323,7 @@ def get_video_mapping():
     if _VIDEO_MAPPING_CACHE is None:
         _VIDEO_MAPPING_CACHE = build_video_mapping()
     return _VIDEO_MAPPING_CACHE
-    
+
 def get_chapter_meaning(canto, chapter):
     """Simple chapter meaning"""
     try:
