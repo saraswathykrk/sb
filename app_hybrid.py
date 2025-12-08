@@ -556,6 +556,66 @@ def translate_text_cascade(text, source_lang='ta'):
 
 # ==================== YOUTUBE FUNCTIONS ====================
 
+@app.route('/test_video/<video_id>', methods=['GET'])
+def test_video(video_id):
+    """Test endpoint to check if a video has transcripts"""
+    try:
+        print(f"\n🧪 Testing video: {video_id}")
+        
+        result = get_youtube_transcript(video_id)
+        
+        if result:
+            return jsonify({
+                'success': True,
+                'video_id': video_id,
+                'has_transcript': True,
+                'language': result['language'],
+                'text_length': len(result['text']),
+                'preview': result['text'][:200]
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'video_id': video_id,
+                'has_transcript': False,
+                'error': 'No transcript available'
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/test_mapping', methods=['GET'])
+def test_mapping():
+    """Test endpoint to see video mappings"""
+    try:
+        mapping = get_video_mapping()
+        
+        # Convert to serializable format
+        mapping_list = [
+            {
+                'canto': c,
+                'chapter': ch,
+                'video_id': vid,
+                'url': f'https://www.youtube.com/watch?v={vid}'
+            }
+            for (c, ch), vid in sorted(mapping.items())
+        ]
+        
+        return jsonify({
+            'success': True,
+            'total_videos': len(mapping_list),
+            'mappings': mapping_list[:50]  # First 50
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
 
 def find_video_for_chapter(canto, chapter):
     """Find YouTube video ID for canto/chapter"""
@@ -578,26 +638,67 @@ def find_video_for_chapter(canto, chapter):
         return None
 
 def get_youtube_transcript(video_id):
-    """Fetch YouTube transcript"""
+    """Fetch YouTube transcript with detailed error handling"""
     try:
-        print(f"📺 Fetching transcript: {video_id}")
+        print(f"📺 Fetching transcript for video: {video_id}")
+        print(f"   URL: https://www.youtube.com/watch?v={video_id}")
         
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        
+        # List all available transcripts
         try:
-            transcript = transcript_list.find_manually_created_transcript(['ta', 'hi', 'en'])
-        except:
-            transcript = transcript_list.find_generated_transcript(['ta', 'hi', 'en'])
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            print(f"✅ Found transcripts for video")
+            
+            # Show available languages
+            available = []
+            for transcript in transcript_list:
+                lang_info = f"{transcript.language} ({transcript.language_code})"
+                if transcript.is_generated:
+                    lang_info += " [auto-generated]"
+                available.append(lang_info)
+            
+            print(f"   Available transcripts: {', '.join(available)}")
+            
+        except Exception as e:
+            print(f"❌ No transcripts available for this video: {e}")
+            return None
         
+        # Try to get transcript in preferred order
+        transcript = None
+        
+        # Try manual transcripts first
+        for lang in ['ta', 'hi', 'en', 'te', 'kn', 'ml']:
+            try:
+                transcript = transcript_list.find_manually_created_transcript([lang])
+                print(f"✅ Found manual transcript in: {lang}")
+                break
+            except:
+                continue
+        
+        # Try auto-generated if manual not found
+        if not transcript:
+            for lang in ['ta', 'hi', 'en', 'te', 'kn', 'ml']:
+                try:
+                    transcript = transcript_list.find_generated_transcript([lang])
+                    print(f"✅ Found auto-generated transcript in: {lang}")
+                    break
+                except:
+                    continue
+        
+        if not transcript:
+            print(f"❌ Could not find any usable transcript")
+            return None
+        
+        # Fetch the transcript
         segments = transcript.fetch()
         full_text = ' '.join([segment['text'] for segment in segments])
         
+        # Detect language
         try:
             lang_code = detect(full_text)
         except:
-            lang_code = 'en'
+            lang_code = transcript.language_code
         
-        print(f"✅ Transcript: {len(full_text)} chars, language: {lang_code}")
+        print(f"✅ Transcript fetched: {len(full_text)} chars, language: {lang_code}")
         
         return {
             'text': full_text,
@@ -607,11 +708,14 @@ def get_youtube_transcript(video_id):
         
     except Exception as e:
         print(f"❌ Transcript error: {e}")
+        import traceback
+        traceback.print_exc()
         return None
-
+        
 def get_chapter_meaning(canto, chapter):
     """Get chapter meaning from YouTube"""
     try:
+        # Check database first
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         
@@ -622,6 +726,7 @@ def get_chapter_meaning(canto, chapter):
         conn.close()
         
         if result:
+            print(f"✅ Chapter meaning from database")
             return {
                 'success': True,
                 'video_id': result[0],
@@ -630,33 +735,47 @@ def get_chapter_meaning(canto, chapter):
                 'source': 'database (cached)'
             }
         
+        # Get video mapping
         video_id = find_video_for_chapter(canto, chapter)
         
         if not video_id:
+            # Show available mappings for debugging
+            mapping = get_video_mapping()
+            available_cantos = sorted(set(c for c, ch in mapping.keys()))
+            
             return {
                 'success': False,
-                'error': f'No video found for Canto {canto}, Chapter {chapter}'
+                'error': f'No video found for Canto {canto}, Chapter {chapter}.\n\nAvailable Cantos in playlist: {available_cantos}\n\nPlease check if the video exists in the playlist.'
             }
         
+        print(f"✅ Found video ID: {video_id}")
+        
+        # Get transcript
         transcript_data = get_youtube_transcript(video_id)
         
         if not transcript_data:
             return {
                 'success': False,
-                'error': 'Could not fetch transcript'
+                'error': f'Could not fetch transcript for video ID: {video_id}\n\nPossible reasons:\n1. Video does not have captions/transcripts enabled\n2. Video is private or unavailable\n3. Transcripts are disabled for this video\n\nVideo URL: https://www.youtube.com/watch?v={video_id}\n\nPlease check if the video has captions enabled on YouTube.'
             }
         
         original_text = transcript_data['text']
         language = transcript_data['language']
         
+        print(f"📝 Original: {len(original_text)} chars, language: {language}")
+        
+        # Translate if needed
         translated_text = original_text
         
         if language in ['ta', 'hi', 'te', 'kn', 'ml'] and language != 'en':
+            print(f"🔄 Translating from {language}...")
+            
             translated_text = translate_text_cascade(original_text, language)
             
             if not translated_text:
-                translated_text = f"[Translation failed]\n\n{original_text}"
+                translated_text = f"[Translation failed - showing original text]\n\n{original_text}"
         
+        # Save to database
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
@@ -666,8 +785,9 @@ def get_chapter_meaning(canto, chapter):
                       (canto, chapter, video_id, original_text, translated_text))
             conn.commit()
             conn.close()
-        except:
-            pass
+            print(f"💾 Saved to database")
+        except Exception as e:
+            print(f"⚠️ Database save error: {e}")
         
         return {
             'success': True,
@@ -680,9 +800,11 @@ def get_chapter_meaning(canto, chapter):
         
     except Exception as e:
         print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             'success': False,
-            'error': str(e)
+            'error': f'Error: {str(e)}\n\nPlease check Render logs for details.'
         }
 
 # ==================== ROUTES ====================
