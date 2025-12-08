@@ -250,7 +250,12 @@
                         <input type="number" id="verse" name="verse" min="1" required placeholder="1" value="1">
                     </div>
                 </div>
-                <button type="submit" class="btn" id="fetchBtn">🔍 Fetch Verse</button>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <button type="submit" class="btn" id="fetchBtn">🔍 Fetch Verse</button>
+                    <button type="button" class="btn" id="chapterMeaningBtn" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        🎬 Show Chapter Meaning
+                    </button>
+                </div>
             </form>
 
             <div class="loading" id="loading">
@@ -368,6 +373,15 @@
                 document.getElementById('error').textContent = 'Error: ' + error.message;
                 document.getElementById('error').style.display = 'block';
             }
+        });
+
+        document.getElementById('chapterMeaningBtn').addEventListener('click', async () => {
+            const canto = document.getElementById('canto').value;
+            const chapter = document.getElementById('chapter').value;
+            
+            alert(`Fetching chapter meaning for Canto ${canto}, Chapter ${chapter}...\n\nThis feature is in development!`);
+            
+            // Will implement full functionality
         });
     </script>
 </body>
