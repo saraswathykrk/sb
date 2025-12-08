@@ -76,11 +76,6 @@
             border-radius: 8px;
             cursor: pointer;
             width: 100%;
-            transition: transform 0.2s;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
         }
 
         .loading {
@@ -207,24 +202,6 @@
             display: none;
             margin-top: 15px;
         }
-
-        #sourceLink:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-        }
-
-        .source-link-container {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 2px solid #e0e0e0;
-        }
-
-        .source-link-label {
-            color: #666;
-            margin-bottom: 10px;
-            font-size: 0.9em;
-        }
     </style>
 </head>
 <body>
@@ -255,7 +232,7 @@
 
             <div class="loading" id="loading">
                 <div class="spinner"></div>
-                <p style="margin-top: 10px; color: #667eea;">Fetching verse from Vedabase.io...</p>
+                <p style="margin-top: 10px; color: #667eea;">Fetching verse...</p>
             </div>
 
             <div class="error" id="error"></div>
@@ -294,22 +271,8 @@
                 <div class="purport-text" id="purport"></div>
             </div>
 
-            <!-- SOURCE LINK - PROMINENT -->
-            <div class="source-link-container">
-                <p class="source-link-label">Read the complete verse with full purport:</p>
-                <a href="#" id="sourceLink" target="_blank" 
-                   style="display: inline-block; 
-                          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                          color: white;
-                          padding: 12px 30px;
-                          border-radius: 8px;
-                          text-decoration: none;
-                          font-weight: 600;
-                          font-size: 1.1em;
-                          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                          transition: transform 0.2s, box-shadow 0.2s;">
-                    📚 View Full Verse on Vedabase.io →
-                </a>
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="#" id="sourceLink" target="_blank" style="color: #667eea; text-decoration: none; font-weight: 600;">📚 View on Vedabase.io</a>
             </div>
         </div>
     </div>
@@ -335,26 +298,23 @@
                 });
 
                 const data = await response.json();
-                console.log('Received data:', data);
+                console.log('Received data:', data); // DEBUG
 
                 document.getElementById('loading').style.display = 'none';
-                document.getElementById('fetchBtn').disabled = false;
 
                 if (data.success) {
                     // Show reference
                     document.getElementById('reference').innerHTML = data.reference + 
                         (data.source ? `<span class="source-badge ${data.source.includes('database') ? 'badge-database' : 'badge-web'}">${data.source}</span>` : '');
 
-                    // Show ALL sections
+                    // Show ALL sections - always visible now
                     document.getElementById('devanagariVerse').textContent = data.devanagari_verse || '(Not available)';
                     document.getElementById('sanskritVerse').textContent = data.sanskrit_verse || '(Not available)';
                     document.getElementById('wordMeanings').textContent = data.word_meanings || '(Not available)';
                     document.getElementById('translation').textContent = data.translation || '(Not available)';
                     document.getElementById('purport').textContent = data.purport || '(Not available)';
 
-                    // Set the Vedabase link
                     document.getElementById('sourceLink').href = data.url;
-                    
                     document.getElementById('result').style.display = 'block';
                     document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
                 } else {
@@ -364,7 +324,6 @@
             } catch (error) {
                 console.error('Fetch error:', error);
                 document.getElementById('loading').style.display = 'none';
-                document.getElementById('fetchBtn').disabled = false;
                 document.getElementById('error').textContent = 'Error: ' + error.message;
                 document.getElementById('error').style.display = 'block';
             }
