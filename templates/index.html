@@ -250,10 +250,11 @@
                         <input type="number" id="verse" name="verse" min="1" required placeholder="1" value="1">
                     </div>
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
                     <button type="submit" class="btn" id="fetchBtn">🔍 Fetch Verse</button>
-                    <button type="button" class="btn" id="chapterMeaningBtn" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                        🎬 Show Chapter Meaning
+                    <button type="button" class="btn" id="chapterMeaningBtn" 
+                            style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        🎬 Chapter Meaning
                     </button>
                 </div>
             </form>
@@ -318,6 +319,26 @@
             </div>
         </div>
     </div>
+    <!-- Chapter Meaning Modal -->
+    <div id="chapterModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; overflow-y: auto;">
+        <div style="max-width: 800px; margin: 50px auto; background: white; border-radius: 15px; padding: 30px; position: relative;">
+            <button id="closeModal" style="position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 30px; cursor: pointer; color: #999;">&times;</button>
+            
+            <h2 style="color: #667eea; margin-bottom: 20px;" id="modalTitle">Chapter Meaning</h2>
+            
+            <div id="modalContent" style="line-height: 1.8; color: #333;">
+                <div class="spinner" style="margin: 50px auto;"></div>
+                <p style="text-align: center; color: #667eea;">Fetching chapter meaning...</p>
+            </div>
+            
+            <div id="youtubeLink" style="text-align: center; margin-top: 20px; display: none;">
+                <a href="#" target="_blank" 
+                style="display: inline-block; background: #ff0000; color: white; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+                    🎬 Watch on YouTube
+                </a>
+            </div>
+        </div>
+    </div>
 
     <script>
         document.getElementById('verseForm').addEventListener('submit', async (e) => {
@@ -375,13 +396,83 @@
             }
         });
 
+        // Chapter Meaning Button
         document.getElementById('chapterMeaningBtn').addEventListener('click', async () => {
             const canto = document.getElementById('canto').value;
             const chapter = document.getElementById('chapter').value;
             
-            alert(`Fetching chapter meaning for Canto ${canto}, Chapter ${chapter}...\n\nThis feature is in development!`);
+            // Show modal
+            document.getElementById('chapterModal').style.display = 'block';
+            document.getElementById('modalTitle').textContent = `Canto ${canto}, Chapter ${chapter} - Meaning`;
+            document.getElementById('modalContent').innerHTML = '<div class="spinner" style="margin: 50px auto;"></div><p style="text-align: center; color: #667eea;">Fetching chapter meaning from YouTube...</p>';
+            document.getElementById('youtubeLink').style.display = 'none';
             
-            // Will implement full functionality
+            try {
+                const response = await fetch('/chapter_meaning', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ canto, chapter })
+                });
+                
+                const data = await response.json();
+                console.log('Chapter meaning:', data);
+                
+                if (data.success) {
+                    const contentDiv = document.getElementById('modalContent');
+                    
+                    // Show translation (or original if English)
+                    contentDiv.innerHTML = `
+                        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 15px;">
+                            <h3 style="color: #667eea; margin-bottom: 10px;">📝 English Translation:</h3>
+                            <p style="line-height: 1.8; white-space: pre-wrap;">${data.translation}</p>
+                        </div>
+                        ${data.transcript !== data.translation ? `
+                        <details style="background: #fff3cd; padding: 15px; border-radius: 8px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: #856404;">Original Transcript (${data.language})</summary>
+                            <p style="margin-top: 10px; line-height: 1.6; white-space: pre-wrap;">${data.transcript}</p>
+                        </details>
+                        ` : ''}
+                        <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
+                            <strong>Source:</strong> ${data.source}
+                        </p>
+                    `;
+                    
+                    // Show YouTube link
+                    if (data.video_id) {
+                        document.getElementById('youtubeLink').style.display = 'block';
+                        document.querySelector('#youtubeLink a').href = `https://www.youtube.com/watch?v=${data.video_id}`;
+                    }
+                } else {
+                    document.getElementById('modalContent').innerHTML = `
+                        <div style="background: #f8d7da; color: #721c24; padding: 20px; border-radius: 8px;">
+                            <strong>Error:</strong> ${data.error}
+                        </div>
+                        <p style="margin-top: 15px; color: #666;">
+                            Note: You need to add video mappings in the code for this feature to work.
+                        </p>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('modalContent').innerHTML = `
+                    <div style="background: #f8d7da; color: #721c24; padding: 20px; border-radius: 8px;">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        });
+
+        // Close modal
+        document.getElementById('closeModal').addEventListener('click', () => {
+            document.getElementById('chapterModal').style.display = 'none';
+        });
+
+        // Close modal on outside click
+        document.getElementById('chapterModal').addEventListener('click', (e) => {
+            if (e.target.id === 'chapterModal') {
+                document.getElementById('chapterModal').style.display = 'none';
+            }
         });
     </script>
 </body>
