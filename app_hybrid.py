@@ -1,40 +1,26 @@
-import json
-import os
-import re
+from flask import Flask, render_template, request, jsonify
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 import sqlite3
-import subprocess
+import os
 import time
+import re
 import requests
-from flask import Flask, jsonify, render_template, request
-from langdetect import detect
-from playwright.sync_api import TimeoutError as PlaywrightTimeout
-from playwright.sync_api import sync_playwright
+import json
+import subprocess
 from youtube_transcript_api import YouTubeTranscriptApi
 
 app = Flask(__name__)
-DB_PATH = "/tmp/srimad_bhagavatam.db"
-
-
-# YouTube playlist URL
-PLAYLIST_URL = (
-    "https://www.youtube.com/playlist?list=PLyepYeJqc4uE3d3CHZbUP9eS6jI471qbK"
-)
-
-# Cache file for video mappings
-MAPPING_CACHE_FILE = "/tmp/video_mappings.json"
-
-# Global variable to store mappings
-_VIDEO_MAPPING_CACHE = None
-
+DB_PATH = '/tmp/srimad_bhagavatam.db'
+PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLyepYeJqc4uE3d3CHZbUP9eS6jI471qbK"
+MAPPING_CACHE_FILE = '/tmp/video_mappings.json'
 
 def init_db():
-    """Initialize database with both tables"""
+    """Initialize database"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-
-        c.execute(
-            """
+        
+        c.execute("""
             CREATE TABLE IF NOT EXISTS verses (
                 canto INTEGER,
                 chapter INTEGER,
@@ -46,11 +32,9 @@ def init_db():
                 purport TEXT,
                 PRIMARY KEY (canto, chapter, verse)
             )
-        """
-        )
-
-        c.execute(
-            """
+        """)
+        
+        c.execute("""
             CREATE TABLE IF NOT EXISTS chapter_meanings (
                 canto INTEGER,
                 chapter INTEGER,
@@ -60,1214 +44,255 @@ def init_db():
                 fetched_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (canto, chapter)
             )
-        """
-        )
-
+        """)
+        
         conn.commit()
         conn.close()
-        print("✅ Database initialized successfully")
+        print("✅ Database initialized")
     except Exception as e:
         print(f"❌ Database init error: {e}")
 
-
-def fetch_playlist_videos():
-    """Fetch all videos from YouTube playlist using yt-dlp"""
-    try:
-        print(f"📺 Fetching playlist videos from YouTube...")
-
-        # Check cache first
-        if os.path.exists(MAPPING_CACHE_FILE):
-            try:
-                with open(MAPPING_CACHE_FILE, "r") as f:
-                    cached_data = json.load(f)
-                    cache_age = time.time() - cached_data.get("timestamp", 0)
-
-                    # Cache valid for 7 days
-                    if cache_age < 7 * 24 * 3600:
-                        print(
-                            f"✅ Using cached playlist data ({len(cached_data['videos'])} videos)"
-                        )
-                        return cached_data["videos"]
-            except:
-                pass
-
-        # Fetch fresh data using yt-dlp
-        cmd = [
-            "yt-dlp",
-            "--dump-json",
-            "--flat-playlist",
-            "--skip-download",
-            PLAYLIST_URL,
-        ]
-
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-
-        if result.returncode != 0:
-            print(f"⚠️ yt-dlp error: {result.stderr}")
-            return []
-
-        # Parse output (each line is a JSON object)
-        videos = []
-        for line in result.stdout.strip().split("\n"):
-            if line.strip():
-                try:
-                    video_data = json.loads(line)
-                    videos.append(
-                        {
-                            "id": video_data.get("id"),
-                            "title": video_data.get("title"),
-                            "url": f"https://www.youtube.com/watch?v={video_data.get('id')}",
-                        }
-                    )
-                except:
-                    continue
-
-        print(f"✅ Fetched {len(videos)} videos from playlist")
-
-        # Cache the results
-        try:
-            with open(MAPPING_CACHE_FILE, "w") as f:
-                json.dump({"timestamp": time.time(), "videos": videos}, f)
-        except:
-            pass
-
-        return videos
-
-    except Exception as e:
-        print(f"❌ Error fetching playlist: {e}")
-        return []
-
-
-def parse_title_for_canto_chapter(title):
-    """Extract canto and chapter from video title"""
-    try:
-        title = title.lower()
-
-        # Pattern 1: "SB 3.1" or "sb 3.1"
-        match = re.search(r"sb\s*(\d+)\.(\d+)", title)
-        if match:
-            return (int(match.group(1)), int(match.group(2)))
-
-        # Pattern 2: "Canto 3 Chapter 1" or "canto 3 chapter 1"
-        match = re.search(r"canto\s*(\d+)\s*chapter\s*(\d+)", title)
-        if match:
-            return (int(match.group(1)), int(match.group(2)))
-
-        # Pattern 3: "3.1" at start or after space
-        match = re.search(r"(?:^|\s)(\d+)\.(\d+)", title)
-        if match:
-            canto = int(match.group(1))
-            chapter = int(match.group(2))
-            # Sanity check: canto should be 1-12
-            if 1 <= canto <= 12:
-                return (canto, chapter)
-
-        # Pattern 4: Tamil/Hindi - "பாகவதம் 3 அத்தியாயம் 1" etc
-        match = re.search(r"(\d+).*?(\d+)", title)
-        if match:
-            canto = int(match.group(1))
-            chapter = int(match.group(2))
-            if 1 <= canto <= 12:
-                return (canto, chapter)
-
-        return None
-
-    except Exception as e:
-        print(f"⚠️ Error parsing title '{title}': {e}")
-        return None
-
-
-def build_video_mapping():
-    """Build automatic mapping of (canto, chapter) -> video_id"""
-    try:
-        print("\n🔄 Building automatic video mapping...")
-
-        videos = fetch_playlist_videos()
-
-        if not videos:
-            print("⚠️ No videos found in playlist")
-            return {}
-
-        mapping = {}
-        unmapped = []
-
-        for video in videos:
-            title = video["title"]
-            video_id = video["id"]
-
-            result = parse_title_for_canto_chapter(title)
-
-            if result:
-                canto, chapter = result
-                mapping[(canto, chapter)] = video_id
-                print(f"  ✅ Mapped: Canto {canto}.{chapter} → {title[:50]}...")
-            else:
-                unmapped.append(title)
-
-        print(f"\n📊 Mapping complete:")
-        print(f"  ✅ Successfully mapped: {len(mapping)} videos")
-        print(f"  ⚠️ Could not parse: {len(unmapped)} videos")
-
-        if unmapped and len(unmapped) <= 10:
-            print(f"\n⚠️ Unmapped titles:")
-            for title in unmapped[:10]:
-                print(f"    - {title}")
-
-        return mapping
-
-    except Exception as e:
-        print(f"❌ Error building mapping: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return {}
-
-
-
-def get_video_mapping():
-    """Get video mapping (cached)"""
-    global _VIDEO_MAPPING_CACHE
-
-    if _VIDEO_MAPPING_CACHE is None:
-        _VIDEO_MAPPING_CACHE = build_video_mapping()
-
-    return _VIDEO_MAPPING_CACHE
-
-
 def is_devanagari(text):
     """Check if text contains Devanagari script"""
-    return bool(re.search(r"[\u0900-\u097F]", text))
-
+    return bool(re.search(r'[\u0900-\u097F]', text))
 
 def fetch_from_vedabase(canto, chapter, verse, retry_count=0):
-    """Fetch verse from vedabase.io with retry logic"""
+    """Fetch verse from vedabase.io"""
     max_retries = 2
-
+    
     try:
         url = f"https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/"
-        print(f"🔍 Fetching (attempt {retry_count + 1}): {url}")
-
+        print(f"🔍 Fetching: {url}")
+        
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             )
             page = context.new_page()
             page.set_default_timeout(60000)
-
+            
             try:
-                page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                page.goto(url, wait_until='domcontentloaded', timeout=60000)
                 time.sleep(3)
             except PlaywrightTimeout:
-                print("⚠️ Page load timeout")
                 browser.close()
-
                 if retry_count < max_retries:
-                    print(f"🔄 Retrying... ({retry_count + 1}/{max_retries})")
                     time.sleep(2)
                     return fetch_from_vedabase(canto, chapter, verse, retry_count + 1)
                 else:
                     return None
-
-            full_text = page.inner_text("body")
-            lines = full_text.split("\n")
-
+            
+            full_text = page.inner_text('body')
+            lines = full_text.split('\n')
+            
             sb_idx = synonyms_idx = translation_idx = purport_idx = -1
-
+            
             for i, line in enumerate(lines):
                 line_lower = line.strip().lower()
-
-                if re.match(r"[śŚ]b \d+\.\d+\.\d+", line.strip(), re.IGNORECASE):
+                if re.match(r'[śŚ]b \d+\.\d+\.\d+', line.strip(), re.IGNORECASE):
                     sb_idx = i
-
-                if line_lower == "synonyms":
+                if line_lower == 'synonyms':
                     synonyms_idx = i
-
-                if line_lower == "translation":
+                if line_lower == 'translation':
                     translation_idx = i
-
-                if line_lower == "purport":
+                if line_lower == 'purport':
                     purport_idx = i
-
+            
             devanagari_verse = ""
             sanskrit_verse = ""
             word_meanings = ""
             translation = ""
             purport = ""
-
+            
             if sb_idx > 0 and synonyms_idx > 0:
                 devanagari_lines = []
                 verse_lines = []
-
+                
                 for i in range(sb_idx + 1, synonyms_idx):
                     line = lines[i].strip()
-                    if line and not any(
-                        skip in line
-                        for skip in ["Default View", "Dual Language", "Advanced View"]
-                    ):
+                    if line and not any(skip in line for skip in ['Default View', 'Dual Language']):
                         if is_devanagari(line):
                             devanagari_lines.append(line)
                         elif len(line) > 3:
                             verse_lines.append(line)
-
-                devanagari_verse = "\n".join(devanagari_lines)
-                sanskrit_verse = "\n".join(verse_lines)
-
+                
+                devanagari_verse = '\n'.join(devanagari_lines)
+                sanskrit_verse = '\n'.join(verse_lines)
+            
             if synonyms_idx > 0 and translation_idx > 0:
                 synonym_lines = []
                 for i in range(synonyms_idx + 1, translation_idx):
                     line = lines[i].strip()
                     if line and len(line) > 3:
                         synonym_lines.append(line)
-                word_meanings = " ".join(synonym_lines)
-
+                word_meanings = ' '.join(synonym_lines)
+            
             if translation_idx > 0 and purport_idx > 0:
                 translation_lines = []
                 for i in range(translation_idx + 1, purport_idx):
                     line = lines[i].strip()
                     if line and len(line) > 3:
                         translation_lines.append(line)
-                translation = " ".join(translation_lines)
-
+                translation = ' '.join(translation_lines)
+            
             if purport_idx > 0:
                 purport_lines = []
                 for i in range(purport_idx + 1, len(lines)):
                     line = lines[i].strip()
-
-                    if any(
-                        stop in line
-                        for stop in [
-                            "Donate",
-                            "Thanks to",
-                            "His Divine Grace",
-                            "©",
-                            "Content used with permission",
-                        ]
-                    ):
+                    if any(stop in line for stop in ['Donate', 'Thanks to', 'His Divine Grace', '©']):
                         break
-
-                    if re.match(r"^Text \d+$", line):
+                    if re.match(r'^Text \d+$', line):
                         break
-
                     if line and len(line) > 3:
                         purport_lines.append(line)
-
-                purport = " ".join(purport_lines)
-
+                purport = ' '.join(purport_lines)
+            
             browser.close()
-
-            print(f"✅ Extracted - Purport: {len(purport)} chars")
-
+            
             return {
-                "devanagari_verse": devanagari_verse.strip(),
-                "sanskrit_verse": sanskrit_verse.strip(),
-                "word_meanings": word_meanings.strip(),
-                "translation": translation.strip(),
-                "purport": purport.strip(),
-                "source": "vedabase.io (fetched)",
+                'devanagari_verse': devanagari_verse.strip(),
+                'sanskrit_verse': sanskrit_verse.strip(),
+                'word_meanings': word_meanings.strip(),
+                'translation': translation.strip(),
+                'purport': purport.strip(),
+                'source': 'vedabase.io (fetched)'
             }
-
+            
     except Exception as e:
         print(f"❌ Error: {e}")
         return None
-
 
 def get_from_database(canto, chapter, verse):
     """Get verse from database"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-
-        c.execute(
-            """SELECT devanagari_verse, sanskrit_verse, word_meanings, translation, purport
-                     FROM verses WHERE canto=? AND chapter=? AND verse=?""",
-            (canto, chapter, verse),
-        )
-
+        c.execute('''SELECT devanagari_verse, sanskrit_verse, word_meanings, translation, purport
+                     FROM verses WHERE canto=? AND chapter=? AND verse=?''',
+                  (canto, chapter, verse))
         result = c.fetchone()
         conn.close()
-
+        
         if result:
             return {
-                "devanagari_verse": result[0] or "",
-                "sanskrit_verse": result[1] or "",
-                "word_meanings": result[2] or "",
-                "translation": result[3] or "",
-                "purport": result[4] or "",
-                "source": "database (cached)",
+                'devanagari_verse': result[0] or "",
+                'sanskrit_verse': result[1] or "",
+                'word_meanings': result[2] or "",
+                'translation': result[3] or "",
+                'purport': result[4] or "",
+                'source': 'database (cached)'
             }
         return None
-
     except Exception as e:
         print(f"❌ Database error: {e}")
         return None
 
-
-def save_to_database(
-    canto,
-    chapter,
-    verse,
-    devanagari_verse,
-    sanskrit_verse,
-    word_meanings,
-    translation,
-    purport,):
+def save_to_database(canto, chapter, verse, devanagari_verse, sanskrit_verse, word_meanings, translation, purport):
     """Save to database"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-
-        c.execute(
-            """INSERT OR REPLACE INTO verses 
+        c.execute('''INSERT OR REPLACE INTO verses 
                      (canto, chapter, verse, devanagari_verse, sanskrit_verse, word_meanings, translation, purport)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                canto,
-                chapter,
-                verse,
-                devanagari_verse,
-                sanskrit_verse,
-                word_meanings,
-                translation,
-                purport,
-            ),
-        )
-
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (canto, chapter, verse, devanagari_verse, sanskrit_verse, word_meanings, translation, purport))
         conn.commit()
         conn.close()
         return True
-    except Exception as e:
-        print(f"❌ Save error: {e}")
+    except:
         return False
-
 
 def fetch_verse_hybrid(canto, chapter, verse):
     """Hybrid approach"""
     verse_ref = f"SB {canto}.{chapter}.{verse}"
-
+    
     db_result = get_from_database(canto, chapter, verse)
     if db_result:
         return {
-            "success": True,
-            "reference": verse_ref,
+            'success': True,
+            'reference': verse_ref,
             **db_result,
-            "url": f"https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/",
+            'url': f'https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/'
         }
-
+    
     web_result = fetch_from_vedabase(canto, chapter, verse)
     if web_result:
-        save_to_database(
-            canto,
-            chapter,
-            verse,
-            web_result["devanagari_verse"],
-            web_result["sanskrit_verse"],
-            web_result["word_meanings"],
-            web_result["translation"],
-            web_result["purport"],
-        )
-
+        save_to_database(canto, chapter, verse, web_result['devanagari_verse'], 
+                        web_result['sanskrit_verse'], web_result['word_meanings'],
+                        web_result['translation'], web_result['purport'])
+        
         return {
-            "success": True,
-            "reference": verse_ref,
+            'success': True,
+            'reference': verse_ref,
             **web_result,
-            "url": f"https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/",
+            'url': f'https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/'
         }
-
+    
     return {
-        "success": False,
-        "error": f"Could not fetch verse {verse_ref}. Please try again.",
+        'success': False,
+        'error': f'Could not fetch verse {verse_ref}'
     }
 
+# YouTube functions
+_VIDEO_MAPPING_CACHE = None
 
-# ==================== TRANSLATION FUNCTIONS ====================
-
-
-def translate_with_libretranslate(text, source_lang="ta", target_lang="en"):
-    """Translate using LibreTranslate"""
+def build_video_mapping():
+    """Build video mapping"""
     try:
-        print(f"🌐 LibreTranslate ({source_lang} → {target_lang})")
-
-        url = "https://libretranslate.com/translate"
-
-        payload = {
-            "q": text[:5000],
-            "source": source_lang,
-            "target": target_lang,
-            "format": "text",
-        }
-
-        response = requests.post(url, json=payload, timeout=30)
-
-        if response.status_code == 200:
-            result = response.json()
-            translation = result.get("translatedText", "")
-            print(f"✅ LibreTranslate: {len(translation)} chars")
-            return translation
-        else:
-            print(f"⚠️ LibreTranslate error: {response.status_code}")
-            return None
-
-    except Exception as e:
-        print(f"❌ LibreTranslate error: {e}")
-        return None
-
-
-def translate_with_mymemory(text, source_lang="ta", target_lang="en"):
-    """Translate using MyMemory"""
-    try:
-        print(f"🌐 MyMemory ({source_lang} → {target_lang})")
-
-        url = "https://api.mymemory.translated.net/get"
-
-        lang_map = {"ta": "ta-IN", "hi": "hi-IN", "en": "en-US"}
-
-        source = lang_map.get(source_lang, source_lang)
-        target = lang_map.get(target_lang, target_lang)
-
-        chunks = [text[i : i + 450] for i in range(0, len(text), 450)]
-        translated_chunks = []
-
-        for i, chunk in enumerate(chunks[:10]):
-            params = {"q": chunk, "langpair": f"{source}|{target}"}
-
-            response = requests.get(url, params=params, timeout=15)
-
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("responseStatus") == 200:
-                    translated_text = result.get("responseData", {}).get(
-                        "translatedText", ""
-                    )
-                    translated_chunks.append(translated_text)
-                    time.sleep(0.5)
-            else:
-                break
-
-        if translated_chunks:
-            full_translation = " ".join(translated_chunks)
-            print(f"✅ MyMemory: {len(full_translation)} chars")
-            return full_translation
-        else:
-            return None
-
-    except Exception as e:
-        print(f"❌ MyMemory error: {e}")
-        return None
-
-
-def translate_with_googletrans(text, source_lang="ta", target_lang="en"):
-    """Translate using Google Translate"""
-    try:
-        print(f"🌐 Google Translate ({source_lang} → {target_lang})")
-
-        from googletrans import Translator
-
-        translator = Translator()
-
-        max_chunk = 4000
-        chunks = [text[i : i + max_chunk] for i in range(0, len(text), max_chunk)]
-        translated_chunks = []
-
-        for i, chunk in enumerate(chunks[:5]):
-            result = translator.translate(chunk, src=source_lang, dest=target_lang)
-            translated_chunks.append(result.text)
-            time.sleep(0.5)
-
-        full_translation = " ".join(translated_chunks)
-        print(f"✅ Google Translate: {len(full_translation)} chars")
-        return full_translation
-
-    except Exception as e:
-        print(f"❌ Google Translate error: {e}")
-        return None
-
-
-def translate_text_cascade(text, source_lang="ta"):
-    """Try multiple translation services"""
-
-    print(f"\n🔄 Translation cascade for {len(text)} chars...")
-
-    # Try LibreTranslate
-    translation = translate_with_libretranslate(text, source_lang, "en")
-    if translation and len(translation) > 50:
-        return translation
-
-    # Try MyMemory
-    print("⚠️ Trying MyMemory...")
-    translation = translate_with_mymemory(text, source_lang, "en")
-    if translation and len(translation) > 50:
-        return translation
-
-    # Try Google Translate
-    print("⚠️ Trying Google Translate...")
-    translation = translate_with_googletrans(text, source_lang, "en")
-    if translation and len(translation) > 50:
-        return translation
-
-    print("❌ All translation services failed")
-    return None
-
-
-# ==================== YOUTUBE FUNCTIONS ====================
-
-
-@app.route("/test_video/<video_id>", methods=["GET"])
-def test_video(video_id):
-    """Test endpoint to check if a video has transcripts"""
-    try:
-        print(f"\n🧪 Testing video: {video_id}")
-
-        result = get_youtube_transcript(video_id)
-
-        if result:
-            return jsonify(
-                {
-                    "success": True,
-                    "video_id": video_id,
-                    "has_transcript": True,
-                    "language": result["language"],
-                    "text_length": len(result["text"]),
-                    "preview": result["text"][:200],
-                }
-            )
-        else:
-            return jsonify(
-                {
-                    "success": False,
-                    "video_id": video_id,
-                    "has_transcript": False,
-                    "error": "No transcript available",
-                }
-            )
-
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-
-@app.route("/test_mapping", methods=["GET"])
-def test_mapping():
-    """Test endpoint to see video mappings"""
-    try:
-        mapping = get_video_mapping()
-
-        # Convert to serializable format
-        mapping_list = [
-            {
-                "canto": c,
-                "chapter": ch,
-                "video_id": vid,
-                "url": f"https://www.youtube.com/watch?v={vid}",
-            }
-            for (c, ch), vid in sorted(mapping.items())
-        ]
-
-        return jsonify(
-            {
-                "success": True,
-                "total_videos": len(mapping_list),
-                "mappings": mapping_list[:50],  # First 50
-            }
-        )
-
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-
-def find_video_for_chapter(canto, chapter):
-    """Find YouTube video ID for canto/chapter"""
-    try:
-        # Get auto-generated mapping
-        mapping = get_video_mapping()
-
-        video_id = mapping.get((canto, chapter))
-
-        if video_id:
-            print(f"✅ Found video for Canto {canto}, Chapter {chapter}: {video_id}")
-            return video_id
-        else:
-            print(f"⚠️ No video found for Canto {canto}, Chapter {chapter}")
-            print(f"   Available mappings: {list(mapping.keys())[:10]}")
-            return None
-
-    except Exception as e:
-        print(f"❌ Error finding video: {e}")
-        return None
-
-
-def get_youtube_transcript(video_id):
-    """Fetch YouTube transcript with detailed error handling"""
-    try:
-        print(f"📺 Fetching transcript for video: {video_id}")
-        print(f"   URL: https://www.youtube.com/watch?v={video_id}")
-
-        # List all available transcripts
-        try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            print(f"✅ Found transcripts for video")
-
-            # Show available languages
-            available = []
-            for transcript in transcript_list:
-                lang_info = f"{transcript.language} ({transcript.language_code})"
-                if transcript.is_generated:
-                    lang_info += " [auto-generated]"
-                available.append(lang_info)
-
-            print(f"   Available transcripts: {', '.join(available)}")
-
-        except Exception as e:
-            print(f"❌ No transcripts available for this video: {e}")
-            return None
-
-        # Try to get transcript in preferred order
-        transcript = None
-
-        # Try manual transcripts first
-        for lang in ["ta", "hi", "en", "te", "kn", "ml"]:
-            try:
-                transcript = transcript_list.find_manually_created_transcript([lang])
-                print(f"✅ Found manual transcript in: {lang}")
-                break
-            except:
-                continue
-
-        # Try auto-generated if manual not found
-        if not transcript:
-            for lang in ["ta", "hi", "en", "te", "kn", "ml"]:
+        if os.path.exists(MAPPING_CACHE_FILE):
+            with open(MAPPING_CACHE_FILE, 'r') as f:
+                cached = json.load(f)
+                if time.time() - cached.get('timestamp', 0) < 7 * 24 * 3600:
+                    return cached.get('mapping', {})
+        
+        cmd = ['yt-dlp', '--dump-json', '--flat-playlist', '--skip-download', PLAYLIST_URL]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        
+        if result.returncode != 0:
+            return {}
+        
+        mapping = {}
+        for line in result.stdout.strip().split('\n'):
+            if line.strip():
                 try:
-                    transcript = transcript_list.find_generated_transcript([lang])
-                    print(f"✅ Found auto-generated transcript in: {lang}")
-                    break
+                    video_data = json.loads(line)
+                    video_id = video_data.get('id')
+                    title = video_data.get('title', '').lower()
+                    
+                    match = re.search(r'(\d+)\.(\d+)', title)
+                    if match:
+                        canto = int(match.group(1))
+                        chapter = int(match.group(2))
+                        if 1 <= canto <= 12:
+                            mapping[(canto, chapter)] = video_id
                 except:
                     continue
-
-        if not transcript:
-            print(f"❌ Could not find any usable transcript")
-            return None
-
-        # Fetch the transcript
-        segments = transcript.fetch()
-        full_text = " ".join([segment["text"] for segment in segments])
-
-        # Detect language
-        try:
-            lang_code = detect(full_text)
-        except:
-            lang_code = transcript.language_code
-
-        print(f"✅ Transcript fetched: {len(full_text)} chars, language: {lang_code}")
-
-        return {"text": full_text, "language": lang_code, "segments": segments}
-
-    except Exception as e:
-        print(f"❌ Transcript error: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return None
-
-
-def transcribe_audio_assemblyai(audio_path, language="ta"):
-    """Transcribe audio using AssemblyAI"""
-    try:
-        if not ASSEMBLYAI_API_KEY:
-            print("⚠️ AssemblyAI API key not configured")
-            return None
-
-        print(f"🎤 Transcribing audio with AssemblyAI (language: {language})...")
-
-        # Language code mapping
-        lang_map = {
-            "ta": "ta",  # Tamil
-            "hi": "hi",  # Hindi
-            "te": "te",  # Telugu
-            "kn": "kn",  # Kannada
-            "ml": "ml",  # Malayalam
-            "en": "en",  # English
-        }
-
-        lang_code = lang_map.get(language, "ta")
-
-        # Configure transcription
-        config = aai.TranscriptionConfig(
-            language_code=lang_code, punctuate=True, format_text=True
-        )
-
-        # Create transcriber
-        transcriber = aai.Transcriber()
-
-        # Transcribe
-        transcript = transcriber.transcribe(audio_path, config=config)
-
-        if transcript.status == aai.TranscriptStatus.error:
-            print(f"❌ Transcription error: {transcript.error}")
-            return None
-
-        print(f"✅ Transcription complete: {len(transcript.text)} chars")
-
-        return {
-            "text": transcript.text,
-            "language": lang_code,
-            "confidence": (
-                transcript.confidence if hasattr(transcript, "confidence") else None
-            ),
-        }
-
-    except Exception as e:
-        print(f"❌ Transcription error: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return None
-
-
-def transcribe_audio_deepgram(audio_path, language="ta"):
-    """Transcribe audio using Deepgram (alternative)"""
-    try:
-        DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "")
-
-        if not DEEPGRAM_API_KEY:
-            print("⚠️ Deepgram API key not configured")
-            return None
-
-        print(f"🎤 Transcribing with Deepgram (language: {language})...")
-
-        url = "https://api.deepgram.com/v1/listen"
-
-        # Language mapping
-        lang_map = {
-            "ta": "ta",
-            "hi": "hi",
-            "te": "te",
-            "kn": "kn",
-            "ml": "ml",
-            "en": "en-US",
-        }
-
-        headers = {
-            "Authorization": f"Token {DEEPGRAM_API_KEY}",
-            "Content-Type": "audio/mp3",
-        }
-
-        params = {
-            "language": lang_map.get(language, "ta"),
-            "punctuate": "true",
-            "model": "general",
-        }
-
-        with open(audio_path, "rb") as audio_file:
-            response = requests.post(
-                url, headers=headers, params=params, data=audio_file, timeout=300
-            )
-
-        if response.status_code == 200:
-            result = response.json()
-            transcript_text = result["results"]["channels"][0]["alternatives"][0][
-                "transcript"
-            ]
-            print(f"✅ Deepgram transcription: {len(transcript_text)} chars")
-
-            return {"text": transcript_text, "language": language}
-        else:
-            print(f"❌ Deepgram error: {response.status_code}")
-            return None
-
-    except Exception as e:
-        print(f"❌ Deepgram error: {e}")
-        return None
-
-
-# ==================== ROUTES ====================
-
-
-@app.before_request
-def ensure_database():
-    if not hasattr(app, "_database_initialized"):
-        init_db()
-        app._database_initialized = True
-
-
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-
-@app.route("/fetch_verse", methods=["POST"])
-def get_verse():
-    try:
-        data = request.json
-        canto = int(data.get("canto"))
-        chapter = int(data.get("chapter"))
-        verse = int(data.get("verse"))
-
-        result = fetch_verse_hybrid(canto, chapter, verse)
-        return jsonify(result)
-
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-
-def download_audio_from_youtube(video_id):
-    """Download audio from YouTube video"""
-    try:
-        print(f"🎵 Downloading audio for video: {video_id}")
-
-        output_path = f"/tmp/audio_{video_id}.mp3"
-
-        # Check if already downloaded
-        if os.path.exists(output_path):
-            print(f"✅ Audio already exists")
-            return output_path
-
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
-
-        # Download audio - smaller file for API
-        cmd = [
-            "yt-dlp",
-            "-x",  # Extract audio
-            "--audio-format",
-            "mp3",
-            "--audio-quality",
-            "9",  # Lowest quality = smaller file
-            "--postprocessor-args",
-            "-ar 16000 -ac 1",  # 16kHz mono
-            "-o",
-            output_path,
-            video_url,
-        ]
-
-        print("📥 Downloading audio...")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-
-        if result.returncode == 0 and os.path.exists(output_path):
-            file_size = os.path.getsize(output_path) / (1024 * 1024)
-            print(f"✅ Audio downloaded: {file_size:.2f} MB")
-
-            # Check file size - if too large, compress more
-            if file_size > 25:  # Most APIs have ~25MB limit
-                print(f"⚠️ File too large, compressing...")
-                compressed_path = f"/tmp/audio_{video_id}_compressed.mp3"
-                compress_cmd = [
-                    "ffmpeg",
-                    "-i",
-                    output_path,
-                    "-ar",
-                    "8000",  # 8kHz
-                    "-ac",
-                    "1",  # Mono
-                    "-b:a",
-                    "32k",  # 32kbps
-                    compressed_path,
-                    "-y",
-                ]
-                subprocess.run(compress_cmd, capture_output=True, timeout=60)
-
-                if os.path.exists(compressed_path):
-                    os.remove(output_path)
-                    os.rename(compressed_path, output_path)
-                    print(
-                        f"✅ Compressed to {os.path.getsize(output_path) / (1024*1024):.2f} MB"
-                    )
-
-            return output_path
-        else:
-            print(f"❌ Download failed: {result.stderr}")
-            return None
-
-    except Exception as e:
-        print(f"❌ Error downloading audio: {e}")
-        return None
-
-
-def transcribe_with_huggingface(audio_path, language="ta"):
-    """Transcribe using Hugging Face (with retry for cold start)"""
-    try:
-        print(f"🎤 Transcribing with Hugging Face...")
-
-        API_URL = "https://api-inference.huggingface.co/models/openai/whisper-large-v3"
-
-        with open(audio_path, "rb") as f:
-            audio_data = f.read()
-
-        file_size_mb = len(audio_data) / (1024 * 1024)
-        print(f"   Audio size: {file_size_mb:.2f} MB")
-
-        # File size check
-        if file_size_mb > 25:
-            print(f"⚠️ File too large for API ({file_size_mb:.2f} MB)")
-            return None
-
-        headers = {"Content-Type": "audio/mpeg"}
-
-        # Try with retries (for cold start)
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                print(f"   Attempt {attempt + 1}/{max_retries}...")
-
-                response = requests.post(
-                    API_URL, headers=headers, data=audio_data, timeout=300
-                )
-
-                print(f"   Response status: {response.status_code}")
-                print(
-                    f"   Response content type: {response.headers.get('content-type', 'unknown')}"
-                )
-
-                if response.status_code == 200:
-                    # Check if response is JSON
-                    content_type = response.headers.get("content-type", "")
-                    if "json" in content_type:
-                        result = response.json()
-                        transcript_text = result.get("text", "").strip()
-
-                        if transcript_text:
-                            print(f"✅ Transcription: {len(transcript_text)} chars")
-                            return {"text": transcript_text, "language": language}
-                    else:
-                        print(f"⚠️ Response is not JSON: {response.text[:200]}")
-
-                elif response.status_code == 503:
-                    # Model is loading
-                    print(f"⚠️ Model loading, waiting 20 seconds...")
-                    time.sleep(20)
-                    continue
-
-                else:
-                    print(f"⚠️ Error {response.status_code}: {response.text[:200]}")
-
-            except requests.exceptions.Timeout:
-                print(f"⚠️ Request timeout on attempt {attempt + 1}")
-                if attempt < max_retries - 1:
-                    time.sleep(10)
-                    continue
-            except Exception as e:
-                print(f"⚠️ Request error: {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(10)
-                    continue
-
-        print(f"❌ All attempts failed")
-        return None
-
-    except Exception as e:
-        print(f"❌ Transcription error: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return None
-
-
-def transcribe_with_replicate(audio_path, language="ta"):
-    """Transcribe using Replicate API (backup, also free)"""
-    try:
-        print(f"🎤 Trying Replicate API...")
-
-        # Replicate's Whisper endpoint (no auth needed for public models)
-        url = "https://api.replicate.com/v1/predictions"
-
-        with open(audio_path, "rb") as f:
-            audio_data = f.read()
-
-        # Upload to a temporary service or use base64
-        import base64
-
-        audio_b64 = base64.b64encode(audio_data).decode("utf-8")
-        audio_uri = f"data:audio/mpeg;base64,{audio_b64}"
-
-        payload = {
-            "version": "openai/whisper:4d50797290df275329f202e48c76360b3f22b08d28c196cbc54600319435f8d2",
-            "input": {
-                "audio": audio_uri,
-                "model": "large-v3",
-                "language": language,
-                "translate": False,
-            },
-        }
-
-        # This might not work without API key, just a fallback attempt
-        response = requests.post(url, json=payload, timeout=60)
-
-        if response.status_code == 201:
-            result = response.json()
-            # Get prediction result
-            # ... (complex polling required)
-            pass
-
-        return None
-
-    except Exception as e:
-        print(f"❌ Replicate error: {e}")
-        return None
-
-
-def get_or_create_transcript(video_id, language="ta"):
-    """Get transcript with multiple fallbacks"""
-    try:
-        print(f"\n📝 Getting transcript for video: {video_id}")
-
-        # Try 1: YouTube transcript (instant if available)
-        youtube_transcript = get_youtube_transcript(video_id)
-
-        if youtube_transcript:
-            print(f"✅ Found YouTube transcript")
-            return youtube_transcript
-
-        print(f"⚠️ No YouTube transcript - attempting AI transcription...")
-
-        # Try 2: Download audio
-        audio_path = download_audio_from_youtube(video_id)
-
-        if not audio_path:
-            print("❌ Could not download audio")
-            return None
-
-        file_size = os.path.getsize(audio_path) / (1024 * 1024)
-        print(f"   Audio file: {file_size:.2f} MB")
-
-        # Check if file is too large
-        if file_size > 25:
-            print(f"⚠️ Audio file too large for free APIs")
-            try:
-                os.remove(audio_path)
-            except:
-                pass
-            return None
-
-        # Try 3: Hugging Face
-        transcript = transcribe_with_huggingface(audio_path, language)
-
-        # Cleanup
-        try:
-            os.remove(audio_path)
-            print(f"🗑️ Cleaned up audio file")
-        except:
-            pass
-
-        return transcript
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return None
-
-
-@app.route("/chapter_meaning", methods=["POST"])
-# def get_chapter_meaning(canto, chapter):
-#     """Get chapter meaning with graceful degradation"""
-#     try:
-#         # Check database first
-#         conn = sqlite3.connect(DB_PATH)
-#         c = conn.cursor()
-
-#         c.execute(
-#             """SELECT video_id, transcript, translation 
-#                      FROM chapter_meanings 
-#                      WHERE canto=? AND chapter=?""",
-#             (canto, chapter),
-#         )
-#         result = c.fetchone()
-#         conn.close()
-
-#         if result and result[1]:
-#             print(f"✅ From database")
-#             return {
-#                 "success": True,
-#                 "video_id": result[0],
-#                 "transcript": result[1],
-#                 "translation": result[2],
-#                 "source": "database (cached)",
-#             }
-
-#         # Get video ID
-#         video_id = find_video_for_chapter(canto, chapter)
-
-#         if not video_id:
-#             return {
-#                 "success": False,
-#                 "error": f"No video found for Canto {canto}, Chapter {chapter}",
-#             }
-
-#         print(f"✅ Found video: {video_id}")
-
-#         # Try to get transcript
-#         transcript_data = get_or_create_transcript(video_id, "ta")
-
-#         if not transcript_data:
-#             # Graceful fallback - return video link
-#             return {
-#                 "success": True,
-#                 "video_id": video_id,
-#                 "transcript": "",
-#                 "translation": "",
-#                 "no_transcript": True,
-#                 "message": "Could not generate transcript automatically. The video may be too long or the AI service is unavailable. Please watch the video on YouTube.",
-#                 "source": "YouTube (no transcript)",
-#             }
-
-#         original_text = transcript_data["text"]
-#         language = transcript_data["language"]
-
-#         print(f"📝 Transcript: {len(original_text)} chars")
-
-#         # Translate
-#         translated_text = original_text
-
-#         if language in ["ta", "hi", "te", "kn", "ml"]:
-#             print(f"🔄 Translating...")
-#             translated_text = translate_text_cascade(original_text, language)
-
-#             if not translated_text:
-#                 translated_text = original_text
-
-#         # Save to database
-#         try:
-#             conn = sqlite3.connect(DB_PATH)
-#             c = conn.cursor()
-#             c.execute(
-#                 """INSERT OR REPLACE INTO chapter_meanings 
-#                          (canto, chapter, video_id, transcript, translation) 
-#                          VALUES (?, ?, ?, ?, ?)""",
-#                 (canto, chapter, video_id, original_text, translated_text),
-#             )
-#             conn.commit()
-#             conn.close()
-#             print(f"💾 Saved")
-#         except:
-#             pass
-
-#         return {
-#             "success": True,
-#             "video_id": video_id,
-#             "transcript": original_text,
-#             "translation": translated_text,
-#             "language": language,
-#             "source": "AI transcribed & translated",
-#         }
-
-#     except Exception as e:
-#         print(f"❌ Error: {e}")
-#         import traceback
-
-#         traceback.print_exc()
-#         return {
-#             "success": False,
-#             "error": f"Error processing request. Please try again or watch on YouTube.",
-#         }
+        
+        with open(MAPPING_CACHE_FILE, 'w') as f:
+            json.dump({'timestamp': time.time(), 'mapping': mapping}, f)
+        
+        return mapping
+    except:
+        return {}
+
+def get_video_mapping():
+    """Get cached mapping"""
+    global _VIDEO_MAPPING_CACHE
+    if _VIDEO_MAPPING_CACHE is None:
+        raw_mapping = build_video_mapping()
+        _VIDEO_MAPPING_CACHE = {(int(k.split(',')[0].strip('() ')), int(k.split(',')[1].strip('() '))): v 
+                                for k, v in raw_mapping.items() if isinstance(k, str)} if isinstance(raw_mapping, dict) else raw_mapping
+    return _VIDEO_MAPPING_CACHE
 
 def get_chapter_meaning(canto, chapter):
-    """Get chapter meaning - simplified version"""
+    """Simple chapter meaning"""
     try:
-        # Check database first
+        # Check database
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        
         c.execute('''SELECT video_id, transcript, translation 
-                     FROM chapter_meanings 
-                     WHERE canto=? AND chapter=?''', (canto, chapter))
+                     FROM chapter_meanings WHERE canto=? AND chapter=?''', (canto, chapter))
         result = c.fetchone()
         conn.close()
         
@@ -1277,12 +302,12 @@ def get_chapter_meaning(canto, chapter):
                 'video_id': result[0],
                 'transcript': result[1],
                 'translation': result[2],
-                'source': 'database (cached)'
+                'source': 'database'
             }
         
         # Get video ID
         mapping = get_video_mapping()
-        video_id = mapping.get((canto, chapter))
+        video_id = mapping.get((int(canto), int(chapter)))
         
         if not video_id:
             return {
@@ -1290,66 +315,72 @@ def get_chapter_meaning(canto, chapter):
                 'error': f'No video found for Canto {canto}, Chapter {chapter}'
             }
         
-        # Try YouTube transcript
-        try:
-            transcript_data = get_youtube_transcript(video_id)
-            
-            if transcript_data:
-                original_text = transcript_data['text']
-                language = transcript_data['language']
-                
-                # Translate if needed
-                translated_text = original_text
-                if language in ['ta', 'hi', 'te', 'kn', 'ml']:
-                    translated_text = translate_text_cascade(original_text, language)
-                    if not translated_text:
-                        translated_text = original_text
-                
-                # Save to database
-                try:
-                    conn = sqlite3.connect(DB_PATH)
-                    c = conn.cursor()
-                    c.execute('''INSERT OR REPLACE INTO chapter_meanings 
-                                 (canto, chapter, video_id, transcript, translation) 
-                                 VALUES (?, ?, ?, ?, ?)''',
-                              (canto, chapter, video_id, original_text, translated_text))
-                    conn.commit()
-                    conn.close()
-                except:
-                    pass
-                
-                return {
-                    'success': True,
-                    'video_id': video_id,
-                    'transcript': original_text,
-                    'translation': translated_text,
-                    'language': language,
-                    'source': 'YouTube (with translation)'
-                }
-        except:
-            pass
-        
-        # No transcript available - return video info
+        # Return video info without transcript for now
         return {
             'success': True,
             'video_id': video_id,
             'transcript': '',
             'translation': '',
             'no_transcript': True,
-            'message': 'This video does not have captions/transcripts available. You can watch it on YouTube to learn about this chapter.',
-            'source': 'YouTube (no transcript)'
+            'message': 'Video found! Transcript feature coming soon. Watch on YouTube:',
+            'source': 'YouTube'
         }
         
     except Exception as e:
+        print(f"❌ Chapter meaning error: {e}")
         import traceback
-        error_details = traceback.format_exc()
-        print(f"❌ Error in get_chapter_meaning: {error_details}")
-        
+        traceback.print_exc()
         return {
             'success': False,
-            'error': 'An error occurred. Please try again later.'
+            'error': str(e)
         }
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5019))
-    app.run(debug=False, host="0.0.0.0", port=port)
+# Routes
+@app.before_request
+def ensure_database():
+    if not hasattr(app, '_database_initialized'):
+        init_db()
+        app._database_initialized = True
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/fetch_verse', methods=['POST'])
+def get_verse():
+    try:
+        data = request.json
+        canto = int(data.get('canto'))
+        chapter = int(data.get('chapter'))
+        verse = int(data.get('verse'))
+        
+        result = fetch_verse_hybrid(canto, chapter, verse)
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/chapter_meaning', methods=['POST'])
+def get_chapter_meaning_route():
+    try:
+        data = request.json
+        canto = int(data.get('canto'))
+        chapter = int(data.get('chapter'))
+        
+        print(f"\n📺 Request: Canto {canto} Chapter {chapter}")
+        
+        result = get_chapter_meaning(canto, chapter)
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"❌ Route error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5019))
+    app.run(debug=False, host='0.0.0.0', port=port)
