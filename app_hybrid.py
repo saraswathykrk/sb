@@ -224,6 +224,14 @@ def fetch_verse_hybrid(canto, chapter, verse):
         'error': f'Could not fetch verse {verse_ref}'
     }
 
+@app.before_request
+def ensure_database():
+    """Ensure database exists before first request"""
+    if not hasattr(app, '_database_initialized'):
+        print("🔄 Initializing database...")
+        init_db()
+        app._database_initialized = True
+
 @app.route('/')
 def index():
     return render_template('index.html')
