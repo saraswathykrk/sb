@@ -6,7 +6,10 @@ import time
 import re
 
 app = Flask(__name__)
-DB_PATH = '/tmp/srimad_bhagavatam.db'  # Use /tmp for ephemeral storage
+#DB_PATH = '/tmp/srimad_bhagavatam.db'  # Use /tmp for ephemeral storage
+import tempfile
+DB_PATH = os.path.join(tempfile.gettempdir(), 'srimad_bhagavatam.db')
+
 
 def init_db():
     """Initialize database - runs on every startup"""
