@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Install system dependencies for Playwright
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -24,24 +24,22 @@ RUN apt-get update && apt-get install -y \
     libxkbcommon0 \
     libxrandr2 \
     xdg-utils \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy requirements
 COPY requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers
+# Install Playwright
 RUN playwright install chromium
 
-# Copy application code
+# Install yt-dlp
+RUN pip install yt-dlp
+
 COPY . .
 
-# Expose port
-EXPOSE 5019
+EXPOSE 5000
 
-# Run the app
-CMD ["gunicorn", "app_hybrid:app", "--bind", "0.0.0.0:5019", "--workers", "1", "--timeout", "120"]
+CMD ["gunicorn", "app_hybrid:app", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "120"]

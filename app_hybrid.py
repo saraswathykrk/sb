@@ -557,15 +557,25 @@ def translate_text_cascade(text, source_lang='ta'):
 # ==================== YOUTUBE FUNCTIONS ====================
 
 
-
 def find_video_for_chapter(canto, chapter):
-    """Find YouTube video ID"""
-    video_id = VIDEO_MAPPING.get((canto, chapter))
-    
-    if video_id:
-        return video_id
-    
-    return None
+    """Find YouTube video ID for canto/chapter"""
+    try:
+        # Get auto-generated mapping
+        mapping = get_video_mapping()
+        
+        video_id = mapping.get((canto, chapter))
+        
+        if video_id:
+            print(f"✅ Found video for Canto {canto}, Chapter {chapter}: {video_id}")
+            return video_id
+        else:
+            print(f"⚠️ No video found for Canto {canto}, Chapter {chapter}")
+            print(f"   Available mappings: {list(mapping.keys())[:10]}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error finding video: {e}")
+        return None
 
 def get_youtube_transcript(video_id):
     """Fetch YouTube transcript"""
