@@ -1156,108 +1156,199 @@ def get_or_create_transcript(video_id, language="ta"):
 
 
 @app.route("/chapter_meaning", methods=["POST"])
+# def get_chapter_meaning(canto, chapter):
+#     """Get chapter meaning with graceful degradation"""
+#     try:
+#         # Check database first
+#         conn = sqlite3.connect(DB_PATH)
+#         c = conn.cursor()
+
+#         c.execute(
+#             """SELECT video_id, transcript, translation 
+#                      FROM chapter_meanings 
+#                      WHERE canto=? AND chapter=?""",
+#             (canto, chapter),
+#         )
+#         result = c.fetchone()
+#         conn.close()
+
+#         if result and result[1]:
+#             print(f"✅ From database")
+#             return {
+#                 "success": True,
+#                 "video_id": result[0],
+#                 "transcript": result[1],
+#                 "translation": result[2],
+#                 "source": "database (cached)",
+#             }
+
+#         # Get video ID
+#         video_id = find_video_for_chapter(canto, chapter)
+
+#         if not video_id:
+#             return {
+#                 "success": False,
+#                 "error": f"No video found for Canto {canto}, Chapter {chapter}",
+#             }
+
+#         print(f"✅ Found video: {video_id}")
+
+#         # Try to get transcript
+#         transcript_data = get_or_create_transcript(video_id, "ta")
+
+#         if not transcript_data:
+#             # Graceful fallback - return video link
+#             return {
+#                 "success": True,
+#                 "video_id": video_id,
+#                 "transcript": "",
+#                 "translation": "",
+#                 "no_transcript": True,
+#                 "message": "Could not generate transcript automatically. The video may be too long or the AI service is unavailable. Please watch the video on YouTube.",
+#                 "source": "YouTube (no transcript)",
+#             }
+
+#         original_text = transcript_data["text"]
+#         language = transcript_data["language"]
+
+#         print(f"📝 Transcript: {len(original_text)} chars")
+
+#         # Translate
+#         translated_text = original_text
+
+#         if language in ["ta", "hi", "te", "kn", "ml"]:
+#             print(f"🔄 Translating...")
+#             translated_text = translate_text_cascade(original_text, language)
+
+#             if not translated_text:
+#                 translated_text = original_text
+
+#         # Save to database
+#         try:
+#             conn = sqlite3.connect(DB_PATH)
+#             c = conn.cursor()
+#             c.execute(
+#                 """INSERT OR REPLACE INTO chapter_meanings 
+#                          (canto, chapter, video_id, transcript, translation) 
+#                          VALUES (?, ?, ?, ?, ?)""",
+#                 (canto, chapter, video_id, original_text, translated_text),
+#             )
+#             conn.commit()
+#             conn.close()
+#             print(f"💾 Saved")
+#         except:
+#             pass
+
+#         return {
+#             "success": True,
+#             "video_id": video_id,
+#             "transcript": original_text,
+#             "translation": translated_text,
+#             "language": language,
+#             "source": "AI transcribed & translated",
+#         }
+
+#     except Exception as e:
+#         print(f"❌ Error: {e}")
+#         import traceback
+
+#         traceback.print_exc()
+#         return {
+#             "success": False,
+#             "error": f"Error processing request. Please try again or watch on YouTube.",
+#         }
+
 def get_chapter_meaning(canto, chapter):
-    """Get chapter meaning with graceful degradation"""
+    """Get chapter meaning - simplified version"""
     try:
         # Check database first
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-
-        c.execute(
-            """SELECT video_id, transcript, translation 
+        
+        c.execute('''SELECT video_id, transcript, translation 
                      FROM chapter_meanings 
-                     WHERE canto=? AND chapter=?""",
-            (canto, chapter),
-        )
+                     WHERE canto=? AND chapter=?''', (canto, chapter))
         result = c.fetchone()
         conn.close()
-
+        
         if result and result[1]:
-            print(f"✅ From database")
             return {
-                "success": True,
-                "video_id": result[0],
-                "transcript": result[1],
-                "translation": result[2],
-                "source": "database (cached)",
+                'success': True,
+                'video_id': result[0],
+                'transcript': result[1],
+                'translation': result[2],
+                'source': 'database (cached)'
             }
-
+        
         # Get video ID
-        video_id = find_video_for_chapter(canto, chapter)
-
+        mapping = get_video_mapping()
+        video_id = mapping.get((canto, chapter))
+        
         if not video_id:
             return {
-                "success": False,
-                "error": f"No video found for Canto {canto}, Chapter {chapter}",
+                'success': False,
+                'error': f'No video found for Canto {canto}, Chapter {chapter}'
             }
-
-        print(f"✅ Found video: {video_id}")
-
-        # Try to get transcript
-        transcript_data = get_or_create_transcript(video_id, "ta")
-
-        if not transcript_data:
-            # Graceful fallback - return video link
-            return {
-                "success": True,
-                "video_id": video_id,
-                "transcript": "",
-                "translation": "",
-                "no_transcript": True,
-                "message": "Could not generate transcript automatically. The video may be too long or the AI service is unavailable. Please watch the video on YouTube.",
-                "source": "YouTube (no transcript)",
-            }
-
-        original_text = transcript_data["text"]
-        language = transcript_data["language"]
-
-        print(f"📝 Transcript: {len(original_text)} chars")
-
-        # Translate
-        translated_text = original_text
-
-        if language in ["ta", "hi", "te", "kn", "ml"]:
-            print(f"🔄 Translating...")
-            translated_text = translate_text_cascade(original_text, language)
-
-            if not translated_text:
-                translated_text = original_text
-
-        # Save to database
+        
+        # Try YouTube transcript
         try:
-            conn = sqlite3.connect(DB_PATH)
-            c = conn.cursor()
-            c.execute(
-                """INSERT OR REPLACE INTO chapter_meanings 
-                         (canto, chapter, video_id, transcript, translation) 
-                         VALUES (?, ?, ?, ?, ?)""",
-                (canto, chapter, video_id, original_text, translated_text),
-            )
-            conn.commit()
-            conn.close()
-            print(f"💾 Saved")
+            transcript_data = get_youtube_transcript(video_id)
+            
+            if transcript_data:
+                original_text = transcript_data['text']
+                language = transcript_data['language']
+                
+                # Translate if needed
+                translated_text = original_text
+                if language in ['ta', 'hi', 'te', 'kn', 'ml']:
+                    translated_text = translate_text_cascade(original_text, language)
+                    if not translated_text:
+                        translated_text = original_text
+                
+                # Save to database
+                try:
+                    conn = sqlite3.connect(DB_PATH)
+                    c = conn.cursor()
+                    c.execute('''INSERT OR REPLACE INTO chapter_meanings 
+                                 (canto, chapter, video_id, transcript, translation) 
+                                 VALUES (?, ?, ?, ?, ?)''',
+                              (canto, chapter, video_id, original_text, translated_text))
+                    conn.commit()
+                    conn.close()
+                except:
+                    pass
+                
+                return {
+                    'success': True,
+                    'video_id': video_id,
+                    'transcript': original_text,
+                    'translation': translated_text,
+                    'language': language,
+                    'source': 'YouTube (with translation)'
+                }
         except:
             pass
-
+        
+        # No transcript available - return video info
         return {
-            "success": True,
-            "video_id": video_id,
-            "transcript": original_text,
-            "translation": translated_text,
-            "language": language,
-            "source": "AI transcribed & translated",
+            'success': True,
+            'video_id': video_id,
+            'transcript': '',
+            'translation': '',
+            'no_transcript': True,
+            'message': 'This video does not have captions/transcripts available. You can watch it on YouTube to learn about this chapter.',
+            'source': 'YouTube (no transcript)'
         }
-
+        
     except Exception as e:
-        print(f"❌ Error: {e}")
         import traceback
-
-        traceback.print_exc()
+        error_details = traceback.format_exc()
+        print(f"❌ Error in get_chapter_meaning: {error_details}")
+        
         return {
-            "success": False,
-            "error": f"Error processing request. Please try again or watch on YouTube.",
+            'success': False,
+            'error': 'An error occurred. Please try again later.'
         }
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5019))
