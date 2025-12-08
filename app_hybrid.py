@@ -18,21 +18,21 @@ from langdetect import detect
 #     aai.settings.api_key = ASSEMBLYAI_API_KEY
 
 
-import whisper
-import torch
+# import whisper
+# import torch
 
-# Load Whisper model (tiny for speed, base for better accuracy)
-WHISPER_MODEL = None
+# # Load Whisper model (tiny for speed, base for better accuracy)
+# WHISPER_MODEL = None
 
-def load_whisper_model():
-    """Load Whisper model (lazy loading)"""
-    global WHISPER_MODEL
-    if WHISPER_MODEL is None:
-        print("🎤 Loading Whisper model...")
-        # Use 'tiny' for faster processing (75MB), 'base' for better accuracy (142MB)
-        WHISPER_MODEL = whisper.load_model("tiny")
-        print("✅ Whisper model loaded")
-    return WHISPER_MODEL
+# def load_whisper_model():
+#     """Load Whisper model (lazy loading)"""
+#     global WHISPER_MODEL
+#     if WHISPER_MODEL is None:
+#         print("🎤 Loading Whisper model...")
+#         # Use 'tiny' for faster processing (75MB), 'base' for better accuracy (142MB)
+#         WHISPER_MODEL = whisper.load_model("tiny")
+#         print("✅ Whisper model loaded")
+#     return WHISPER_MODEL
 
 
 app = Flask(__name__)
