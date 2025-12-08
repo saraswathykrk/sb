@@ -25,21 +25,24 @@ RUN apt-get update && apt-get install -y \
     libxrandr2 \
     xdg-utils \
     ffmpeg \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY requirements.txt .
+
+# Install Python packages
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Playwright
 RUN playwright install chromium
 
-# Install yt-dlp
-RUN pip install yt-dlp
+# Download Whisper tiny model (only 75MB - fits in free tier)
+RUN python -c "import whisper; whisper.load_model('tiny')"
 
 COPY . .
 
 EXPOSE 5019
 
-CMD ["gunicorn", "app_hybrid:app", "--bind", "0.0.0.0:5019", "--workers", "1", "--timeout", "120"]
+CMD ["gunicorn", "app_hybrid:app", "--bind", "0.0.0.0:5019", "--workers", "1", "--timeout", "600", "--graceful-timeout", "600"]

@@ -8,16 +8,33 @@ import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 from langdetect import detect
 
-import assemblyai as aai
+# import assemblyai as aai
 
-# AssemblyAI API Key (add to environment variables on Render)
-ASSEMBLYAI_API_KEY = os.environ.get('ASSEMBLYAI_API_KEY', '')
+# # AssemblyAI API Key (add to environment variables on Render)
+# ASSEMBLYAI_API_KEY = os.environ.get('ASSEMBLYAI_API_KEY', '')
 
-# Configure AssemblyAI
-if ASSEMBLYAI_API_KEY:
-    aai.settings.api_key = ASSEMBLYAI_API_KEY
+# # Configure AssemblyAI
+# if ASSEMBLYAI_API_KEY:
+#     aai.settings.api_key = ASSEMBLYAI_API_KEY
 
-    
+
+import whisper
+import torch
+
+# Load Whisper model (tiny for speed, base for better accuracy)
+WHISPER_MODEL = None
+
+def load_whisper_model():
+    """Load Whisper model (lazy loading)"""
+    global WHISPER_MODEL
+    if WHISPER_MODEL is None:
+        print("🎤 Loading Whisper model...")
+        # Use 'tiny' for faster processing (75MB), 'base' for better accuracy (142MB)
+        WHISPER_MODEL = whisper.load_model("tiny")
+        print("✅ Whisper model loaded")
+    return WHISPER_MODEL
+
+
 app = Flask(__name__)
 DB_PATH = '/tmp/srimad_bhagavatam.db'
 
@@ -723,42 +740,42 @@ def get_youtube_transcript(video_id):
         return None
 
 
-def download_audio_from_youtube(video_id):
-    """Download audio from YouTube video"""
-    try:
-        print(f"🎵 Downloading audio for video: {video_id}")
+# def download_audio_from_youtube(video_id):
+#     """Download audio from YouTube video"""
+#     try:
+#         print(f"🎵 Downloading audio for video: {video_id}")
         
-        output_path = f"/tmp/audio_{video_id}.mp3"
+#         output_path = f"/tmp/audio_{video_id}.mp3"
         
-        # Check if already downloaded
-        if os.path.exists(output_path):
-            print(f"✅ Audio already downloaded")
-            return output_path
+#         # Check if already downloaded
+#         if os.path.exists(output_path):
+#             print(f"✅ Audio already downloaded")
+#             return output_path
         
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
+#         video_url = f"https://www.youtube.com/watch?v={video_id}"
         
-        # Download audio using yt-dlp
-        cmd = [
-            'yt-dlp',
-            '-x',  # Extract audio
-            '--audio-format', 'mp3',
-            '--audio-quality', '0',  # Best quality
-            '-o', output_path,
-            video_url
-        ]
+#         # Download audio using yt-dlp
+#         cmd = [
+#             'yt-dlp',
+#             '-x',  # Extract audio
+#             '--audio-format', 'mp3',
+#             '--audio-quality', '0',  # Best quality
+#             '-o', output_path,
+#             video_url
+#         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+#         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         
-        if result.returncode == 0 and os.path.exists(output_path):
-            print(f"✅ Audio downloaded: {os.path.getsize(output_path) / (1024*1024):.2f} MB")
-            return output_path
-        else:
-            print(f"❌ Download failed: {result.stderr}")
-            return None
+#         if result.returncode == 0 and os.path.exists(output_path):
+#             print(f"✅ Audio downloaded: {os.path.getsize(output_path) / (1024*1024):.2f} MB")
+#             return output_path
+#         else:
+#             print(f"❌ Download failed: {result.stderr}")
+#             return None
             
-    except Exception as e:
-        print(f"❌ Error downloading audio: {e}")
-        return None
+#     except Exception as e:
+#         print(f"❌ Error downloading audio: {e}")
+#         return None
 
 def transcribe_audio_assemblyai(audio_path, language='ta'):
     """Transcribe audio using AssemblyAI"""
@@ -866,46 +883,46 @@ def transcribe_audio_deepgram(audio_path, language='ta'):
         print(f"❌ Deepgram error: {e}")
         return None
 
-def get_or_create_transcript(video_id, language='ta'):
-    """Get transcript - try YouTube first, then generate from audio"""
-    try:
-        print(f"\n📝 Getting transcript for video: {video_id}")
+# def get_or_create_transcript(video_id, language='ta'):
+#     """Get transcript - try YouTube first, then generate from audio"""
+#     try:
+#         print(f"\n📝 Getting transcript for video: {video_id}")
         
-        # Try YouTube transcript first (fastest)
-        youtube_transcript = get_youtube_transcript(video_id)
+#         # Try YouTube transcript first (fastest)
+#         youtube_transcript = get_youtube_transcript(video_id)
         
-        if youtube_transcript:
-            print(f"✅ Found YouTube transcript")
-            return youtube_transcript
+#         if youtube_transcript:
+#             print(f"✅ Found YouTube transcript")
+#             return youtube_transcript
         
-        print(f"⚠️ No YouTube transcript - generating from audio...")
+#         print(f"⚠️ No YouTube transcript - generating from audio...")
         
-        # Download audio
-        audio_path = download_audio_from_youtube(video_id)
+#         # Download audio
+#         audio_path = download_audio_from_youtube(video_id)
         
-        if not audio_path:
-            return None
+#         if not audio_path:
+#             return None
         
-        # Try AssemblyAI first
-        transcript = transcribe_audio_assemblyai(audio_path, language)
+#         # Try AssemblyAI first
+#         transcript = transcribe_audio_assemblyai(audio_path, language)
         
-        # Fallback to Deepgram if AssemblyAI fails
-        if not transcript:
-            print("⚠️ AssemblyAI failed, trying Deepgram...")
-            transcript = transcribe_audio_deepgram(audio_path, language)
+#         # Fallback to Deepgram if AssemblyAI fails
+#         if not transcript:
+#             print("⚠️ AssemblyAI failed, trying Deepgram...")
+#             transcript = transcribe_audio_deepgram(audio_path, language)
         
-        # Clean up audio file
-        try:
-            os.remove(audio_path)
-            print(f"🗑️ Cleaned up audio file")
-        except:
-            pass
+#         # Clean up audio file
+#         try:
+#             os.remove(audio_path)
+#             print(f"🗑️ Cleaned up audio file")
+#         except:
+#             pass
         
-        return transcript
+#         return transcript
         
-    except Exception as e:
-        print(f"❌ Error getting transcript: {e}")
-        return None
+#     except Exception as e:
+#         print(f"❌ Error getting transcript: {e}")
+#         return None
 
 
 # def get_chapter_meaning(canto, chapter):
@@ -1213,17 +1230,236 @@ def get_verse():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/chapter_meaning', methods=['POST'])
-def get_chapter_meaning_route():
-    try:
-        data = request.json
-        canto = int(data.get('canto'))
-        chapter = int(data.get('chapter'))
+# def get_chapter_meaning_route():
+#     try:
+#         data = request.json
+#         canto = int(data.get('canto'))
+#         chapter = int(data.get('chapter'))
         
-        result = get_chapter_meaning(canto, chapter)
-        return jsonify(result)
+#         result = get_chapter_meaning(canto, chapter)
+#         return jsonify(result)
+        
+#     except Exception as e:
+#         return jsonify({'success': False, 'error': str(e)})
+def get_chapter_meaning(canto, chapter):
+    """Get chapter meaning - generates transcript from audio if needed"""
+    try:
+        # Check database first
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        
+        c.execute('''SELECT video_id, transcript, translation 
+                     FROM chapter_meanings 
+                     WHERE canto=? AND chapter=?''', (canto, chapter))
+        result = c.fetchone()
+        conn.close()
+        
+        if result and result[1]:
+            print(f"✅ Chapter meaning from database")
+            return {
+                'success': True,
+                'video_id': result[0],
+                'transcript': result[1],
+                'translation': result[2],
+                'source': 'database (cached)'
+            }
+        
+        # Get video ID
+        video_id = find_video_for_chapter(canto, chapter)
+        
+        if not video_id:
+            return {
+                'success': False,
+                'error': f'No video found for Canto {canto}, Chapter {chapter}'
+            }
+        
+        print(f"✅ Found video: {video_id}")
+        
+        # Detect language (default to Tamil)
+        likely_language = 'ta'
+        
+        # Get or create transcript
+        transcript_data = get_or_create_transcript(video_id, likely_language)
+        
+        if not transcript_data:
+            return {
+                'success': False,
+                'error': f'Could not transcribe audio. Video may be unavailable or too long.\n\nVideo URL: https://www.youtube.com/watch?v={video_id}'
+            }
+        
+        original_text = transcript_data['text']
+        language = transcript_data['language']
+        
+        print(f"📝 Transcript: {len(original_text)} chars, language: {language}")
+        
+        # Translate if needed
+        translated_text = original_text
+        
+        if language in ['ta', 'hi', 'te', 'kn', 'ml'] and language != 'en':
+            print(f"🔄 Translating to English...")
+            
+            translated_text = translate_text_cascade(original_text, language)
+            
+            if not translated_text:
+                translated_text = original_text + "\n\n[Translation unavailable - showing original]"
+        
+        # Save to database
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('''INSERT OR REPLACE INTO chapter_meanings 
+                         (canto, chapter, video_id, transcript, translation) 
+                         VALUES (?, ?, ?, ?, ?)''',
+                      (canto, chapter, video_id, original_text, translated_text))
+            conn.commit()
+            conn.close()
+            print(f"💾 Saved to database")
+        except Exception as e:
+            print(f"⚠️ Database save failed: {e}")
+        
+        return {
+            'success': True,
+            'video_id': video_id,
+            'transcript': original_text,
+            'translation': translated_text,
+            'language': language,
+            'source': 'Whisper AI (auto-transcribed) + translated'
+        }
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'success': False,
+            'error': f'Error: {str(e)}'
+        }
+
+
+def download_audio_from_youtube(video_id):
+    """Download audio from YouTube video"""
+    try:
+        print(f"🎵 Downloading audio for video: {video_id}")
+        
+        output_path = f"/tmp/audio_{video_id}.mp3"
+        
+        # Check if already downloaded
+        if os.path.exists(output_path):
+            print(f"✅ Audio already exists")
+            return output_path
+        
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        
+        # Download audio using yt-dlp (best quality, small file)
+        cmd = [
+            'yt-dlp',
+            '-x',  # Extract audio
+            '--audio-format', 'mp3',
+            '--audio-quality', '5',  # 128kbps (good quality, smaller file)
+            '--postprocessor-args', '-ar 16000',  # 16kHz for Whisper
+            '-o', output_path,
+            video_url
+        ]
+        
+        print("📥 Downloading audio (this may take 1-2 minutes)...")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+        if result.returncode == 0 and os.path.exists(output_path):
+            file_size = os.path.getsize(output_path) / (1024*1024)
+            print(f"✅ Audio downloaded: {file_size:.2f} MB")
+            return output_path
+        else:
+            print(f"❌ Download failed: {result.stderr}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error downloading audio: {e}")
+        return None
+
+def transcribe_with_whisper(audio_path, language='ta'):
+    """Transcribe audio using Whisper (completely free, no limits)"""
+    try:
+        print(f"🎤 Transcribing audio with Whisper...")
+        
+        # Load model
+        model = load_whisper_model()
+        
+        # Language mapping
+        lang_map = {
+            'ta': 'tamil',
+            'hi': 'hindi',
+            'te': 'telugu',
+            'kn': 'kannada',
+            'ml': 'malayalam',
+            'en': 'english'
+        }
+        
+        whisper_lang = lang_map.get(language, 'tamil')
+        
+        # Transcribe
+        print(f"   Language: {whisper_lang}")
+        print(f"   This will take 2-5 minutes for a 30-minute video...")
+        
+        result = model.transcribe(
+            audio_path,
+            language=whisper_lang,
+            fp16=False,  # Use FP32 for CPU compatibility
+            verbose=False
+        )
+        
+        transcript_text = result['text'].strip()
+        
+        print(f"✅ Transcription complete: {len(transcript_text)} chars")
+        
+        return {
+            'text': transcript_text,
+            'language': language
+        }
+        
+    except Exception as e:
+        print(f"❌ Whisper transcription error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def get_or_create_transcript(video_id, language='ta'):
+    """Get transcript - try YouTube first, then Whisper"""
+    try:
+        print(f"\n📝 Getting transcript for video: {video_id}")
+        
+        # Try YouTube transcript first (instant, free)
+        youtube_transcript = get_youtube_transcript(video_id)
+        
+        if youtube_transcript:
+            print(f"✅ Found YouTube transcript")
+            return youtube_transcript
+        
+        print(f"⚠️ No YouTube transcript - generating with Whisper...")
+        
+        # Download audio
+        audio_path = download_audio_from_youtube(video_id)
+        
+        if not audio_path:
+            print("❌ Could not download audio")
+            return None
+        
+        # Transcribe with Whisper
+        transcript = transcribe_with_whisper(audio_path, language)
+        
+        # Clean up audio file
+        try:
+            os.remove(audio_path)
+            print(f"🗑️ Cleaned up audio file")
+        except:
+            pass
+        
+        return transcript
+        
+    except Exception as e:
+        print(f"❌ Error getting transcript: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5019))
