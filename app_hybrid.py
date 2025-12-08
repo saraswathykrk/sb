@@ -276,15 +276,22 @@ def build_video_mapping():
     except:
         return {}
 
+# def get_video_mapping():
+#     """Get cached mapping"""
+#     global _VIDEO_MAPPING_CACHE
+#     if _VIDEO_MAPPING_CACHE is None:
+#         raw_mapping = build_video_mapping()
+#         _VIDEO_MAPPING_CACHE = {(int(k.split(',')[0].strip('() ')), int(k.split(',')[1].strip('() '))): v 
+#                                 for k, v in raw_mapping.items() if isinstance(k, str)} if isinstance(raw_mapping, dict) else raw_mapping
+#     return _VIDEO_MAPPING_CACHE
+
 def get_video_mapping():
     """Get cached mapping"""
     global _VIDEO_MAPPING_CACHE
     if _VIDEO_MAPPING_CACHE is None:
-        raw_mapping = build_video_mapping()
-        _VIDEO_MAPPING_CACHE = {(int(k.split(',')[0].strip('() ')), int(k.split(',')[1].strip('() '))): v 
-                                for k, v in raw_mapping.items() if isinstance(k, str)} if isinstance(raw_mapping, dict) else raw_mapping
+        _VIDEO_MAPPING_CACHE = build_video_mapping()
     return _VIDEO_MAPPING_CACHE
-
+    
 def get_chapter_meaning(canto, chapter):
     """Simple chapter meaning"""
     try:
