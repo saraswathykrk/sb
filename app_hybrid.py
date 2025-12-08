@@ -307,6 +307,52 @@ def build_video_mapping():
         import traceback
         traceback.print_exc()
         return {}
+
+@app.route('/debug/mapping', methods=['GET'])
+def debug_mapping():
+    """Debug endpoint to see video mappings"""
+    try:
+        mapping = get_video_mapping()
+        
+        # Convert to readable format
+        mapping_list = []
+        for (canto, chapter), video_id in sorted(mapping.items()):
+            mapping_list.append({
+                'canto': canto,
+                'chapter': chapter,
+                'video_id': video_id,
+                'url': f'https://www.youtube.com/watch?v={video_id}'
+            })
+        
+        return jsonify({
+            'success': True,
+            'total': len(mapping_list),
+            'has_3_1': (3, 1) in mapping,
+            'mappings': mapping_list
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        })
+
+@app.route('/debug/clear_cache', methods=['GET'])
+def clear_cache():
+    """Clear the video mapping cache"""
+    try:
+        global _VIDEO_MAPPING_CACHE
+        _VIDEO_MAPPING_CACHE = None
+        
+        if os.path.exists(MAPPING_CACHE_FILE):
+            os.remove(MAPPING_CACHE_FILE)
+            return jsonify({'success': True, 'message': 'Cache cleared. Refresh to rebuild.'})
+        else:
+            return jsonify({'success': True, 'message': 'No cache file found.'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+        
               
 # def get_video_mapping():
 #     """Get cached mapping"""
