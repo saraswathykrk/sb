@@ -12,3 +12,4 @@ requests==2.31.0
 #python -m playwright install chromium
 langdetect==1.0.9
 googletrans==4.0.0rc1
+yt-dlp==2023.12.30

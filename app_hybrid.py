@@ -54,6 +54,176 @@ def init_db():
     except Exception as e:
         print(f"❌ Database init error: {e}")
 
+
+import json
+import subprocess
+
+# YouTube playlist URL
+PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLyepYeJqc4uE3d3CHZbUP9eS6jI471qbK"
+
+# Cache file for video mappings
+MAPPING_CACHE_FILE = '/tmp/video_mappings.json'
+
+def fetch_playlist_videos():
+    """Fetch all videos from YouTube playlist using yt-dlp"""
+    try:
+        print(f"📺 Fetching playlist videos from YouTube...")
+        
+        # Check cache first
+        if os.path.exists(MAPPING_CACHE_FILE):
+            try:
+                with open(MAPPING_CACHE_FILE, 'r') as f:
+                    cached_data = json.load(f)
+                    cache_age = time.time() - cached_data.get('timestamp', 0)
+                    
+                    # Cache valid for 7 days
+                    if cache_age < 7 * 24 * 3600:
+                        print(f"✅ Using cached playlist data ({len(cached_data['videos'])} videos)")
+                        return cached_data['videos']
+            except:
+                pass
+        
+        # Fetch fresh data using yt-dlp
+        cmd = [
+            'yt-dlp',
+            '--dump-json',
+            '--flat-playlist',
+            '--skip-download',
+            PLAYLIST_URL
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        
+        if result.returncode != 0:
+            print(f"⚠️ yt-dlp error: {result.stderr}")
+            return []
+        
+        # Parse output (each line is a JSON object)
+        videos = []
+        for line in result.stdout.strip().split('\n'):
+            if line.strip():
+                try:
+                    video_data = json.loads(line)
+                    videos.append({
+                        'id': video_data.get('id'),
+                        'title': video_data.get('title'),
+                        'url': f"https://www.youtube.com/watch?v={video_data.get('id')}"
+                    })
+                except:
+                    continue
+        
+        print(f"✅ Fetched {len(videos)} videos from playlist")
+        
+        # Cache the results
+        try:
+            with open(MAPPING_CACHE_FILE, 'w') as f:
+                json.dump({
+                    'timestamp': time.time(),
+                    'videos': videos
+                }, f)
+        except:
+            pass
+        
+        return videos
+        
+    except Exception as e:
+        print(f"❌ Error fetching playlist: {e}")
+        return []
+
+def parse_title_for_canto_chapter(title):
+    """Extract canto and chapter from video title"""
+    try:
+        title = title.lower()
+        
+        # Pattern 1: "SB 3.1" or "sb 3.1"
+        match = re.search(r'sb\s*(\d+)\.(\d+)', title)
+        if match:
+            return (int(match.group(1)), int(match.group(2)))
+        
+        # Pattern 2: "Canto 3 Chapter 1" or "canto 3 chapter 1"
+        match = re.search(r'canto\s*(\d+)\s*chapter\s*(\d+)', title)
+        if match:
+            return (int(match.group(1)), int(match.group(2)))
+        
+        # Pattern 3: "3.1" at start or after space
+        match = re.search(r'(?:^|\s)(\d+)\.(\d+)', title)
+        if match:
+            canto = int(match.group(1))
+            chapter = int(match.group(2))
+            # Sanity check: canto should be 1-12
+            if 1 <= canto <= 12:
+                return (canto, chapter)
+        
+        # Pattern 4: Tamil/Hindi - "பாகவதம் 3 அத்தியாயம் 1" etc
+        match = re.search(r'(\d+).*?(\d+)', title)
+        if match:
+            canto = int(match.group(1))
+            chapter = int(match.group(2))
+            if 1 <= canto <= 12:
+                return (canto, chapter)
+        
+        return None
+        
+    except Exception as e:
+        print(f"⚠️ Error parsing title '{title}': {e}")
+        return None
+
+def build_video_mapping():
+    """Build automatic mapping of (canto, chapter) -> video_id"""
+    try:
+        print("\n🔄 Building automatic video mapping...")
+        
+        videos = fetch_playlist_videos()
+        
+        if not videos:
+            print("⚠️ No videos found in playlist")
+            return {}
+        
+        mapping = {}
+        unmapped = []
+        
+        for video in videos:
+            title = video['title']
+            video_id = video['id']
+            
+            result = parse_title_for_canto_chapter(title)
+            
+            if result:
+                canto, chapter = result
+                mapping[(canto, chapter)] = video_id
+                print(f"  ✅ Mapped: Canto {canto}.{chapter} → {title[:50]}...")
+            else:
+                unmapped.append(title)
+        
+        print(f"\n📊 Mapping complete:")
+        print(f"  ✅ Successfully mapped: {len(mapping)} videos")
+        print(f"  ⚠️ Could not parse: {len(unmapped)} videos")
+        
+        if unmapped and len(unmapped) <= 10:
+            print(f"\n⚠️ Unmapped titles:")
+            for title in unmapped[:10]:
+                print(f"    - {title}")
+        
+        return mapping
+        
+    except Exception as e:
+        print(f"❌ Error building mapping: {e}")
+        import traceback
+        traceback.print_exc()
+        return {}
+
+# Global variable to store mappings
+_VIDEO_MAPPING_CACHE = None
+
+def get_video_mapping():
+    """Get video mapping (cached)"""
+    global _VIDEO_MAPPING_CACHE
+    
+    if _VIDEO_MAPPING_CACHE is None:
+        _VIDEO_MAPPING_CACHE = build_video_mapping()
+    
+    return _VIDEO_MAPPING_CACHE
+
 def is_devanagari(text):
     """Check if text contains Devanagari script"""
     return bool(re.search(r'[\u0900-\u097F]', text))
@@ -386,11 +556,7 @@ def translate_text_cascade(text, source_lang='ta'):
 
 # ==================== YOUTUBE FUNCTIONS ====================
 
-VIDEO_MAPPING = {
-    # Add your video mappings here
-    # (1, 1): "VIDEO_ID",
-    # (3, 1): "VIDEO_ID",
-}
+
 
 def find_video_for_chapter(canto, chapter):
     """Find YouTube video ID"""
