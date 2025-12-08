@@ -1336,6 +1336,57 @@ def get_chapter_meaning(canto, chapter):
         }
 
 
+def transcribe_with_huggingface(audio_path, language='ta'):
+    """Transcribe using Hugging Face Inference API (FREE, no limits!)"""
+    try:
+        print(f"🎤 Transcribing with Hugging Face Whisper API...")
+        
+        # Hugging Face Inference API endpoint
+        API_URL = "https://api-inference.huggingface.co/models/openai/whisper-large-v3"
+        
+        # Read audio file
+        with open(audio_path, 'rb') as f:
+            audio_data = f.read()
+        
+        # Language mapping
+        lang_map = {
+            'ta': 'tamil',
+            'hi': 'hindi',
+            'te': 'telugu',
+            'kn': 'kannada',
+            'ml': 'malayalam',
+            'en': 'english'
+        }
+        
+        headers = {
+            "Content-Type": "audio/mpeg"
+        }
+        
+        # Send request
+        print(f"   Sending audio to Hugging Face ({len(audio_data) / (1024*1024):.2f} MB)...")
+        print(f"   This may take 2-3 minutes...")
+        
+        response = requests.post(API_URL, headers=headers, data=audio_data, timeout=300)
+        
+        if response.status_code == 200:
+            result = response.json()
+            transcript_text = result.get('text', '').strip()
+            
+            print(f"✅ Transcription complete: {len(transcript_text)} chars")
+            
+            return {
+                'text': transcript_text,
+                'language': language
+            }
+        else:
+            print(f"⚠️ Hugging Face error: {response.status_code}")
+            print(f"   Response: {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Transcription error: {e}")
+        return None
+
 def download_audio_from_youtube(video_id):
     """Download audio from YouTube video"""
     try:
@@ -1350,23 +1401,43 @@ def download_audio_from_youtube(video_id):
         
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         
-        # Download audio using yt-dlp (best quality, small file)
+        # Download audio - smaller file for API
         cmd = [
             'yt-dlp',
             '-x',  # Extract audio
             '--audio-format', 'mp3',
-            '--audio-quality', '5',  # 128kbps (good quality, smaller file)
-            '--postprocessor-args', '-ar 16000',  # 16kHz for Whisper
+            '--audio-quality', '9',  # Lowest quality = smaller file
+            '--postprocessor-args', '-ar 16000 -ac 1',  # 16kHz mono
             '-o', output_path,
             video_url
         ]
         
-        print("📥 Downloading audio (this may take 1-2 minutes)...")
+        print("📥 Downloading audio...")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         
         if result.returncode == 0 and os.path.exists(output_path):
             file_size = os.path.getsize(output_path) / (1024*1024)
             print(f"✅ Audio downloaded: {file_size:.2f} MB")
+            
+            # Check file size - if too large, compress more
+            if file_size > 25:  # Most APIs have ~25MB limit
+                print(f"⚠️ File too large, compressing...")
+                compressed_path = f"/tmp/audio_{video_id}_compressed.mp3"
+                compress_cmd = [
+                    'ffmpeg', '-i', output_path,
+                    '-ar', '8000',  # 8kHz
+                    '-ac', '1',  # Mono
+                    '-b:a', '32k',  # 32kbps
+                    compressed_path,
+                    '-y'
+                ]
+                subprocess.run(compress_cmd, capture_output=True, timeout=60)
+                
+                if os.path.exists(compressed_path):
+                    os.remove(output_path)
+                    os.rename(compressed_path, output_path)
+                    print(f"✅ Compressed to {os.path.getsize(output_path) / (1024*1024):.2f} MB")
+            
             return output_path
         else:
             print(f"❌ Download failed: {result.stderr}")
@@ -1376,54 +1447,8 @@ def download_audio_from_youtube(video_id):
         print(f"❌ Error downloading audio: {e}")
         return None
 
-def transcribe_with_whisper(audio_path, language='ta'):
-    """Transcribe audio using Whisper (completely free, no limits)"""
-    try:
-        print(f"🎤 Transcribing audio with Whisper...")
-        
-        # Load model
-        model = load_whisper_model()
-        
-        # Language mapping
-        lang_map = {
-            'ta': 'tamil',
-            'hi': 'hindi',
-            'te': 'telugu',
-            'kn': 'kannada',
-            'ml': 'malayalam',
-            'en': 'english'
-        }
-        
-        whisper_lang = lang_map.get(language, 'tamil')
-        
-        # Transcribe
-        print(f"   Language: {whisper_lang}")
-        print(f"   This will take 2-5 minutes for a 30-minute video...")
-        
-        result = model.transcribe(
-            audio_path,
-            language=whisper_lang,
-            fp16=False,  # Use FP32 for CPU compatibility
-            verbose=False
-        )
-        
-        transcript_text = result['text'].strip()
-        
-        print(f"✅ Transcription complete: {len(transcript_text)} chars")
-        
-        return {
-            'text': transcript_text,
-            'language': language
-        }
-        
-    except Exception as e:
-        print(f"❌ Whisper transcription error: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
 def get_or_create_transcript(video_id, language='ta'):
-    """Get transcript - try YouTube first, then Whisper"""
+    """Get transcript - try YouTube first, then Hugging Face"""
     try:
         print(f"\n📝 Getting transcript for video: {video_id}")
         
@@ -1434,7 +1459,7 @@ def get_or_create_transcript(video_id, language='ta'):
             print(f"✅ Found YouTube transcript")
             return youtube_transcript
         
-        print(f"⚠️ No YouTube transcript - generating with Whisper...")
+        print(f"⚠️ No YouTube transcript - generating with AI...")
         
         # Download audio
         audio_path = download_audio_from_youtube(video_id)
@@ -1443,8 +1468,13 @@ def get_or_create_transcript(video_id, language='ta'):
             print("❌ Could not download audio")
             return None
         
-        # Transcribe with Whisper
-        transcript = transcribe_with_whisper(audio_path, language)
+        # Check file size
+        file_size = os.path.getsize(audio_path) / (1024*1024)
+        if file_size > 25:
+            print(f"⚠️ Audio file too large ({file_size:.2f} MB), may fail")
+        
+        # Transcribe with Hugging Face
+        transcript = transcribe_with_huggingface(audio_path, language)
         
         # Clean up audio file
         try:
@@ -1460,6 +1490,85 @@ def get_or_create_transcript(video_id, language='ta'):
         import traceback
         traceback.print_exc()
         return None
+
+# def download_audio_from_youtube(video_id):
+#     """Download audio from YouTube video"""
+#     try:
+#         print(f"🎵 Downloading audio for video: {video_id}")
+        
+#         output_path = f"/tmp/audio_{video_id}.mp3"
+        
+#         # Check if already downloaded
+#         if os.path.exists(output_path):
+#             print(f"✅ Audio already exists")
+#             return output_path
+        
+#         video_url = f"https://www.youtube.com/watch?v={video_id}"
+        
+#         # Download audio using yt-dlp (best quality, small file)
+#         cmd = [
+#             'yt-dlp',
+#             '-x',  # Extract audio
+#             '--audio-format', 'mp3',
+#             '--audio-quality', '5',  # 128kbps (good quality, smaller file)
+#             '--postprocessor-args', '-ar 16000',  # 16kHz for Whisper
+#             '-o', output_path,
+#             video_url
+#         ]
+        
+#         print("📥 Downloading audio (this may take 1-2 minutes)...")
+#         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+#         if result.returncode == 0 and os.path.exists(output_path):
+#             file_size = os.path.getsize(output_path) / (1024*1024)
+#             print(f"✅ Audio downloaded: {file_size:.2f} MB")
+#             return output_path
+#         else:
+#             print(f"❌ Download failed: {result.stderr}")
+#             return None
+            
+#     except Exception as e:
+#         print(f"❌ Error downloading audio: {e}")
+#         return None
+
+# def get_or_create_transcript(video_id, language='ta'):
+#     """Get transcript - try YouTube first, then Whisper"""
+#     try:
+#         print(f"\n📝 Getting transcript for video: {video_id}")
+        
+#         # Try YouTube transcript first (instant, free)
+#         youtube_transcript = get_youtube_transcript(video_id)
+        
+#         if youtube_transcript:
+#             print(f"✅ Found YouTube transcript")
+#             return youtube_transcript
+        
+#         print(f"⚠️ No YouTube transcript - generating with Whisper...")
+        
+#         # Download audio
+#         audio_path = download_audio_from_youtube(video_id)
+        
+#         if not audio_path:
+#             print("❌ Could not download audio")
+#             return None
+        
+#         # Transcribe with Whisper
+#         transcript = transcribe_with_whisper(audio_path, language)
+        
+#         # Clean up audio file
+#         try:
+#             os.remove(audio_path)
+#             print(f"🗑️ Cleaned up audio file")
+#         except:
+#             pass
+        
+#         return transcript
+        
+#     except Exception as e:
+#         print(f"❌ Error getting transcript: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return None
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5019))
