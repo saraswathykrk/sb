@@ -238,7 +238,7 @@ def fetch_verse_hybrid(canto, chapter, verse):
 _VIDEO_MAPPING_CACHE = None
 
 def build_video_mapping():
-    """Build video mapping"""
+    """Build video mapping with detailed logging"""
     try:
         # Check cache
         if os.path.exists(MAPPING_CACHE_FILE):
@@ -249,7 +249,6 @@ def build_video_mapping():
                         # Convert string keys back to tuple keys
                         mapping = {}
                         for key_str, video_id in cached.get('mapping', {}).items():
-                            # Parse "(3, 1)" back to (3, 1)
                             canto, chapter = key_str.strip('()').split(',')
                             mapping[(int(canto.strip()), int(chapter.strip()))] = video_id
                         print(f"✅ Loaded {len(mapping)} videos from cache")
@@ -257,57 +256,112 @@ def build_video_mapping():
             except Exception as e:
                 print(f"⚠️ Cache load error: {e}")
         
-        # Fetch from YouTube
-        print("📺 Fetching playlist from YouTube...")
-        cmd = ['yt-dlp', '--dump-json', '--flat-playlist', '--skip-download', PLAYLIST_URL]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        
-        if result.returncode != 0:
-            print(f"❌ yt-dlp failed: {result.stderr}")
+        # Test if yt-dlp is available
+        print("🔍 Testing yt-dlp availability...")
+        try:
+            test_result = subprocess.run(['yt-dlp', '--version'], 
+                                        capture_output=True, text=True, timeout=5)
+            print(f"   yt-dlp version: {test_result.stdout.strip()}")
+        except FileNotFoundError:
+            print("❌ yt-dlp command not found!")
+            return {}
+        except Exception as e:
+            print(f"❌ yt-dlp test error: {e}")
             return {}
         
+        # Fetch from YouTube
+        print(f"📺 Fetching playlist: {PLAYLIST_URL}")
+        cmd = ['yt-dlp', '--dump-json', '--flat-playlist', '--skip-download', PLAYLIST_URL]
+        
+        print(f"   Command: {' '.join(cmd)}")
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        
+        print(f"   Return code: {result.returncode}")
+        print(f"   Stdout length: {len(result.stdout)} chars")
+        print(f"   Stderr length: {len(result.stderr)} chars")
+        
+        if result.stderr:
+            print(f"   Stderr: {result.stderr[:500]}")
+        
+        if result.returncode != 0:
+            print(f"❌ yt-dlp failed with code {result.returncode}")
+            print(f"   Error: {result.stderr[:1000]}")
+            return {}
+        
+        if not result.stdout.strip():
+            print(f"❌ yt-dlp returned empty output")
+            return {}
+        
+        # Parse output
+        print("📝 Parsing video data...")
         mapping = {}
+        line_count = 0
+        
         for line in result.stdout.strip().split('\n'):
-            if line.strip():
-                try:
-                    video_data = json.loads(line)
-                    video_id = video_data.get('id')
-                    title = video_data.get('title', '').lower()
-                    
-                    # Parse title for canto.chapter
-                    match = re.search(r'(\d+)\.(\d+)', title)
-                    if match:
-                        canto = int(match.group(1))
-                        chapter = int(match.group(2))
-                        if 1 <= canto <= 12:
-                            mapping[(canto, chapter)] = video_id
-                            print(f"  ✅ Mapped: Canto {canto}.{chapter} → {video_id}")
-                except Exception as e:
-                    print(f"⚠️ Parse error: {e}")
+            line_count += 1
+            if not line.strip():
+                continue
+                
+            try:
+                video_data = json.loads(line)
+                video_id = video_data.get('id')
+                title = video_data.get('title', '')
+                
+                if not video_id or not title:
                     continue
+                
+                title_lower = title.lower()
+                
+                # Try multiple patterns
+                match = re.search(r'(\d+)\.(\d+)', title_lower)
+                if match:
+                    canto = int(match.group(1))
+                    chapter = int(match.group(2))
+                    
+                    if 1 <= canto <= 12:
+                        mapping[(canto, chapter)] = video_id
+                        print(f"  ✅ [{canto}.{chapter}] {title[:60]}")
+                    
+            except json.JSONDecodeError as e:
+                print(f"⚠️ JSON parse error on line {line_count}: {e}")
+                print(f"   Line: {line[:200]}")
+            except Exception as e:
+                print(f"⚠️ Parse error on line {line_count}: {e}")
         
-        print(f"📊 Total mapped: {len(mapping)} videos")
+        print(f"\n📊 Results:")
+        print(f"   Total lines processed: {line_count}")
+        print(f"   Videos mapped: {len(mapping)}")
         
-        # Save to cache - convert tuple keys to strings for JSON
-        try:
-            cache_data = {
-                'timestamp': time.time(),
-                'mapping': {f"({c},{ch})": vid for (c, ch), vid in mapping.items()}
-            }
-            with open(MAPPING_CACHE_FILE, 'w') as f:
-                json.dump(cache_data, f)
-            print(f"💾 Saved to cache")
-        except Exception as e:
-            print(f"⚠️ Cache save error: {e}")
+        if len(mapping) > 0:
+            print(f"   Sample mappings:")
+            for (c, ch), vid in list(mapping.items())[:5]:
+                print(f"     Canto {c}.{ch} → {vid}")
+        
+        # Save to cache
+        if len(mapping) > 0:
+            try:
+                cache_data = {
+                    'timestamp': time.time(),
+                    'mapping': {f"({c},{ch})": vid for (c, ch), vid in mapping.items()}
+                }
+                with open(MAPPING_CACHE_FILE, 'w') as f:
+                    json.dump(cache_data, f)
+                print(f"💾 Saved {len(mapping)} videos to cache")
+            except Exception as e:
+                print(f"⚠️ Cache save error: {e}")
         
         return mapping
         
+    except subprocess.TimeoutExpired:
+        print(f"❌ yt-dlp timeout after 120 seconds")
+        return {}
     except Exception as e:
         print(f"❌ Mapping error: {e}")
         import traceback
         traceback.print_exc()
         return {}
-
+        
 @app.route('/debug/mapping', methods=['GET'])
 def debug_mapping():
     """Debug endpoint to see video mappings"""
