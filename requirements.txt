@@ -6,4 +6,5 @@ selenium==4.15.2
 webdriver-manager==4.0.1
 playwright
 gunicorn==21.2.0
+psycopg2-binary==2.9.9
 #python -m playwright install chromium

@@ -4,22 +4,66 @@ import sqlite3
 import os
 import time
 import re
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 DB_PATH = 'srimad_bhagavatam.db'
 
+# Use PostgreSQL if DATABASE_URL exists, otherwise SQLite
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+def get_db_connection():
+    if DATABASE_URL:
+        # PostgreSQL
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        return conn
+    else:
+        # SQLite (local development)
+        import sqlite3
+        conn = sqlite3.connect('srimad_bhagavatam.db')
+        conn.row_factory = sqlite3.Row
+        return conn
+
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='verses'")
-    if not c.fetchone():
-        c.execute('''CREATE TABLE verses
-                     (canto INTEGER, chapter INTEGER, verse INTEGER,
-                      devanagari_verse TEXT, sanskrit_verse TEXT, 
-                      word_meanings TEXT, translation TEXT, purport TEXT,
-                      PRIMARY KEY (canto, chapter, verse))''')
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Check if using PostgreSQL or SQLite
+    if DATABASE_URL:
+        # PostgreSQL
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS verses (
+                canto INTEGER,
+                chapter INTEGER,
+                verse INTEGER,
+                devanagari_verse TEXT,
+                sanskrit_verse TEXT,
+                word_meanings TEXT,
+                translation TEXT,
+                purport TEXT,
+                PRIMARY KEY (canto, chapter, verse)
+            )
+        """)
+    else:
+        # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS verses (
+                canto INTEGER,
+                chapter INTEGER,
+                verse INTEGER,
+                devanagari_verse TEXT,
+                sanskrit_verse TEXT,
+                word_meanings TEXT,
+                translation TEXT,
+                purport TEXT,
+                PRIMARY KEY (canto, chapter, verse)
+            )
+        """)
+    
     conn.commit()
     conn.close()
+
 
 def fetch_from_vedabase(canto, chapter, verse):
     try:
