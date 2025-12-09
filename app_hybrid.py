@@ -1561,6 +1561,48 @@ def test_transcript(video_id):
         })
 
 
+@app.route('/debug/test_video/<int:canto>/<int:chapter>', methods=['GET'])
+def debug_test_video(canto, chapter):
+    """Debug endpoint to test video and transcript"""
+    try:
+        # Get video mapping
+        mapping = get_video_mapping()
+        video_id = mapping.get((canto, chapter))
+        
+        result = {
+            'mapping_total': len(mapping),
+            'canto': canto,
+            'chapter': chapter,
+            'video_id': video_id,
+            'has_video': video_id is not None
+        }
+        
+        if video_id:
+            result['youtube_url'] = f'https://www.youtube.com/watch?v={video_id}'
+            
+            # Try to get transcript
+            print(f"\n{'='*60}")
+            print(f"TESTING VIDEO: {video_id}")
+            print(f"{'='*60}\n")
+            
+            transcript = get_youtube_transcript(video_id)
+            
+            if transcript:
+                result['transcript_found'] = True
+                result['transcript_length'] = len(transcript['text'])
+                result['transcript_language'] = transcript['language']
+                result['transcript_preview'] = transcript['text'][:200]
+            else:
+                result['transcript_found'] = False
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        })
+        
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5019))
     app.run(debug=False, host='0.0.0.0', port=port)
