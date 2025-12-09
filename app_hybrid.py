@@ -1283,110 +1283,254 @@ def get_chapter_meaning_route():
         return jsonify({'success': False, 'error': str(e)})
 
 
+# def get_youtube_transcript_ytdlp(video_id):
+#     """Extract subtitles using yt-dlp command-line tool"""
+#     try:
+#         print(f"🎯 Extracting subtitles with yt-dlp for: {video_id}")
+        
+#         video_url = f"https://www.youtube.com/watch?v={video_id}"
+        
+#         # Create temp directory for subtitle files
+#         import tempfile
+#         temp_dir = tempfile.mkdtemp()
+#         subtitle_path = os.path.join(temp_dir, 'subtitle')
+        
+#         # Try to download Tamil subtitles (auto-generated or manual)
+#         cmd = [
+#             'yt-dlp',
+#             '--write-auto-sub',  # Get auto-generated subs
+#             '--write-sub',       # Get manual subs
+#             '--skip-download',   # Don't download video
+#             '--sub-lang', 'ta,hi,en',  # Try Tamil, Hindi, English
+#             '--sub-format', 'vtt',  # VTT format (easiest to parse)
+#             '--output', subtitle_path,
+#             video_url
+#         ]
+        
+#         print(f"   Command: {' '.join(cmd)}")
+        
+#         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        
+#         print(f"   Return code: {result.returncode}")
+#         if result.stderr:
+#             print(f"   Stderr: {result.stderr[:500]}")
+        
+#         # Look for generated subtitle files
+#         import glob
+#         subtitle_files = glob.glob(f"{subtitle_path}*.vtt")
+        
+#         if not subtitle_files:
+#             print(f"❌ No subtitle files found")
+#             # Cleanup
+#             import shutil
+#             shutil.rmtree(temp_dir, ignore_errors=True)
+#             return None
+        
+#         print(f"✅ Found subtitle file: {subtitle_files[0]}")
+        
+#         # Read and parse VTT file
+#         with open(subtitle_files[0], 'r', encoding='utf-8') as f:
+#             vtt_content = f.read()
+        
+#         # Parse VTT format
+#         import re
+        
+#         # Remove VTT header and timing lines
+#         lines = vtt_content.split('\n')
+#         text_lines = []
+        
+#         for line in lines:
+#             line = line.strip()
+#             # Skip empty lines, WEBVTT header, and timing lines
+#             if (line and 
+#                 not line.startswith('WEBVTT') and 
+#                 not line.startswith('Kind:') and
+#                 not line.startswith('Language:') and
+#                 not '-->' in line and
+#                 not line.isdigit()):
+#                 # Remove HTML tags
+#                 line = re.sub(r'<[^>]+>', '', line)
+#                 if line:
+#                     text_lines.append(line)
+        
+#         full_text = ' '.join(text_lines)
+        
+#         # Cleanup
+#         import shutil
+#         shutil.rmtree(temp_dir, ignore_errors=True)
+        
+#         if not full_text or len(full_text) < 10:
+#             print(f"❌ Extracted text too short: {len(full_text)} chars")
+#             return None
+        
+#         # Detect language
+#         try:
+#             from langdetect import detect
+#             detected_lang = detect(full_text[:500])
+#         except:
+#             detected_lang = 'ta'
+        
+#         print(f"✅ yt-dlp success: {len(full_text)} chars, language: {detected_lang}")
+        
+#         return {
+#             'text': full_text,
+#             'language': detected_lang,
+#             'segments': []
+#         }
+        
+#     except subprocess.TimeoutExpired:
+#         print(f"❌ yt-dlp timeout")
+#         return None
+#     except Exception as e:
+#         print(f"❌ yt-dlp error: {type(e).__name__}: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return None
+
 def get_youtube_transcript_ytdlp(video_id):
-    """Extract subtitles using yt-dlp command-line tool"""
+    """Extract subtitles using yt-dlp - improved version"""
     try:
         print(f"🎯 Extracting subtitles with yt-dlp for: {video_id}")
         
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         
-        # Create temp directory for subtitle files
+        # Step 1: List available subtitles first
+        print(f"   Step 1: Checking available subtitles...")
+        list_cmd = ['yt-dlp', '--list-subs', video_url]
+        
+        list_result = subprocess.run(list_cmd, capture_output=True, text=True, timeout=30)
+        
+        if list_result.stdout:
+            print(f"   Available subtitles:")
+            for line in list_result.stdout.split('\n')[:20]:
+                if line.strip():
+                    print(f"     {line}")
+        
+        # Step 2: Try to download subtitles
         import tempfile
         temp_dir = tempfile.mkdtemp()
         subtitle_path = os.path.join(temp_dir, 'subtitle')
         
-        # Try to download Tamil subtitles (auto-generated or manual)
-        cmd = [
-            'yt-dlp',
-            '--write-auto-sub',  # Get auto-generated subs
-            '--write-sub',       # Get manual subs
-            '--skip-download',   # Don't download video
-            '--sub-lang', 'ta,hi,en',  # Try Tamil, Hindi, English
-            '--sub-format', 'vtt',  # VTT format (easiest to parse)
-            '--output', subtitle_path,
-            video_url
-        ]
+        # Try multiple approaches
+        subtitle_text = None
         
-        print(f"   Command: {' '.join(cmd)}")
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        
-        print(f"   Return code: {result.returncode}")
-        if result.stderr:
-            print(f"   Stderr: {result.stderr[:500]}")
-        
-        # Look for generated subtitle files
-        import glob
-        subtitle_files = glob.glob(f"{subtitle_path}*.vtt")
-        
-        if not subtitle_files:
-            print(f"❌ No subtitle files found")
-            # Cleanup
-            import shutil
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            return None
-        
-        print(f"✅ Found subtitle file: {subtitle_files[0]}")
-        
-        # Read and parse VTT file
-        with open(subtitle_files[0], 'r', encoding='utf-8') as f:
-            vtt_content = f.read()
-        
-        # Parse VTT format
-        import re
-        
-        # Remove VTT header and timing lines
-        lines = vtt_content.split('\n')
-        text_lines = []
-        
-        for line in lines:
-            line = line.strip()
-            # Skip empty lines, WEBVTT header, and timing lines
-            if (line and 
-                not line.startswith('WEBVTT') and 
-                not line.startswith('Kind:') and
-                not line.startswith('Language:') and
-                not '-->' in line and
-                not line.isdigit()):
-                # Remove HTML tags
-                line = re.sub(r'<[^>]+>', '', line)
-                if line:
-                    text_lines.append(line)
-        
-        full_text = ' '.join(text_lines)
+        # Approach 1: Try all available subtitles
+        for sub_format in ['vtt', 'srv3', 'srv2', 'srv1', 'ttml', 'json3']:
+            if subtitle_text:
+                break
+                
+            for lang_option in [
+                'ta',           # Tamil
+                'hi',           # Hindi  
+                'en',           # English
+                'ta-IN',        # Tamil (India)
+                'hi-IN',        # Hindi (India)
+            ]:
+                if subtitle_text:
+                    break
+                    
+                print(f"   Trying: lang={lang_option}, format={sub_format}")
+                
+                cmd = [
+                    'yt-dlp',
+                    '--write-auto-sub',
+                    '--write-sub',
+                    '--skip-download',
+                    '--sub-lang', lang_option,
+                    '--sub-format', sub_format,
+                    '--output', subtitle_path,
+                    '--no-warnings',
+                    video_url
+                ]
+                
+                try:
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                    
+                    # Look for subtitle files
+                    import glob
+                    subtitle_files = glob.glob(f"{subtitle_path}*")
+                    
+                    if subtitle_files:
+                        print(f"   ✅ Found file: {os.path.basename(subtitle_files[0])}")
+                        
+                        # Read the file
+                        with open(subtitle_files[0], 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                        
+                        # Parse based on format
+                        if content:
+                            import re
+                            
+                            # Remove timestamps and formatting
+                            lines = content.split('\n')
+                            text_lines = []
+                            
+                            for line in lines:
+                                line = line.strip()
+                                # Skip headers, timestamps, and empty lines
+                                if (line and 
+                                    not line.startswith('WEBVTT') and
+                                    not line.startswith('Kind:') and
+                                    not line.startswith('Language:') and
+                                    not line.startswith('<?xml') and
+                                    not '-->' in line and
+                                    not line.isdigit() and
+                                    not line.startswith('<') and
+                                    not line.endswith('>')):
+                                    # Remove HTML/XML tags
+                                    line = re.sub(r'<[^>]+>', '', line)
+                                    if line and len(line) > 2:
+                                        text_lines.append(line)
+                            
+                            subtitle_text = ' '.join(text_lines)
+                            
+                            if len(subtitle_text) > 50:
+                                print(f"   ✅ Extracted {len(subtitle_text)} chars")
+                                break
+                            else:
+                                subtitle_text = None
+                        
+                        # Clean up this attempt
+                        for f in subtitle_files:
+                            try:
+                                os.remove(f)
+                            except:
+                                pass
+                                
+                except subprocess.TimeoutExpired:
+                    print(f"   ⏱️ Timeout for {lang_option}/{sub_format}")
+                except Exception as e:
+                    print(f"   ⚠️ Error: {e}")
         
         # Cleanup
         import shutil
         shutil.rmtree(temp_dir, ignore_errors=True)
         
-        if not full_text or len(full_text) < 10:
-            print(f"❌ Extracted text too short: {len(full_text)} chars")
+        if not subtitle_text or len(subtitle_text) < 50:
+            print(f"❌ No valid subtitles extracted")
             return None
         
         # Detect language
         try:
             from langdetect import detect
-            detected_lang = detect(full_text[:500])
+            detected_lang = detect(subtitle_text[:500])
         except:
             detected_lang = 'ta'
         
-        print(f"✅ yt-dlp success: {len(full_text)} chars, language: {detected_lang}")
+        print(f"✅ SUCCESS: {len(subtitle_text)} chars, language: {detected_lang}")
+        print(f"   Preview: {subtitle_text[:200]}...")
         
         return {
-            'text': full_text,
+            'text': subtitle_text,
             'language': detected_lang,
             'segments': []
         }
         
-    except subprocess.TimeoutExpired:
-        print(f"❌ yt-dlp timeout")
-        return None
     except Exception as e:
         print(f"❌ yt-dlp error: {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
         return None
-
 
 @app.route('/test_transcript/<video_id>', methods=['GET'])
 def test_transcript(video_id):
