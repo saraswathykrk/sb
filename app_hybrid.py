@@ -319,10 +319,10 @@ def build_video_mapping():
                 
                 # Try multiple patterns
                 patterns = [
+                    r'skandam\s*(\d+)\s*adhyaayam\s*(\d+)',  # Tamil: Skandam 3 Adhyaayam 1
                     r'sb\s*(\d+)\.(\d+)',  # SB 3.1
                     r'canto\s*(\d+)\s*chapter\s*(\d+)',  # Canto 3 Chapter 1
                     r'(\d+)\.(\d+)',  # 3.1
-                    r'srimad.*?(\d+)\.(\d+)',  # Srimad Bhagavatam 3.1
                 ]
                 
                 matched = False
