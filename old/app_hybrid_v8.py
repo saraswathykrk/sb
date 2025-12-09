@@ -56,120 +56,13 @@ def is_devanagari(text):
     """Check if text contains Devanagari script"""
     return bool(re.search(r'[\u0900-\u097F]', text))
 
-# def fetch_from_vedabase(canto, chapter, verse, retry_count=0):
-#     """Fetch verse from vedabase.io"""
-#     max_retries = 2
-    
-#     try:
-#         url = f"https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/"
-#         print(f"🔍 Fetching: {url}")
-        
-#         with sync_playwright() as p:
-#             browser = p.chromium.launch(headless=True)
-#             context = browser.new_context(
-#                 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-#             )
-#             page = context.new_page()
-#             page.set_default_timeout(60000)
-            
-#             try:
-#                 page.goto(url, wait_until='domcontentloaded', timeout=60000)
-#                 time.sleep(3)
-#             except PlaywrightTimeout:
-#                 browser.close()
-#                 if retry_count < max_retries:
-#                     time.sleep(2)
-#                     return fetch_from_vedabase(canto, chapter, verse, retry_count + 1)
-#                 else:
-#                     return None
-            
-#             full_text = page.inner_text('body')
-#             lines = full_text.split('\n')
-            
-#             sb_idx = synonyms_idx = translation_idx = purport_idx = -1
-            
-#             for i, line in enumerate(lines):
-#                 line_lower = line.strip().lower()
-#                 if re.match(r'[śŚ]b \d+\.\d+\.\d+', line.strip(), re.IGNORECASE):
-#                     sb_idx = i
-#                 if line_lower == 'synonyms':
-#                     synonyms_idx = i
-#                 if line_lower == 'translation':
-#                     translation_idx = i
-#                 if line_lower == 'purport':
-#                     purport_idx = i
-            
-#             devanagari_verse = ""
-#             sanskrit_verse = ""
-#             word_meanings = ""
-#             translation = ""
-#             purport = ""
-            
-#             if sb_idx > 0 and synonyms_idx > 0:
-#                 devanagari_lines = []
-#                 verse_lines = []
-                
-#                 for i in range(sb_idx + 1, synonyms_idx):
-#                     line = lines[i].strip()
-#                     if line and not any(skip in line for skip in ['Default View', 'Dual Language']):
-#                         if is_devanagari(line):
-#                             devanagari_lines.append(line)
-#                         elif len(line) > 3:
-#                             verse_lines.append(line)
-                
-#                 devanagari_verse = '\n'.join(devanagari_lines)
-#                 sanskrit_verse = '\n'.join(verse_lines)
-            
-#             if synonyms_idx > 0 and translation_idx > 0:
-#                 synonym_lines = []
-#                 for i in range(synonyms_idx + 1, translation_idx):
-#                     line = lines[i].strip()
-#                     if line and len(line) > 3:
-#                         synonym_lines.append(line)
-#                 word_meanings = ' '.join(synonym_lines)
-            
-#             if translation_idx > 0 and purport_idx > 0:
-#                 translation_lines = []
-#                 for i in range(translation_idx + 1, purport_idx):
-#                     line = lines[i].strip()
-#                     if line and len(line) > 3:
-#                         translation_lines.append(line)
-#                 translation = ' '.join(translation_lines)
-            
-#             if purport_idx > 0:
-#                 purport_lines = []
-#                 for i in range(purport_idx + 1, len(lines)):
-#                     line = lines[i].strip()
-#                     if any(stop in line for stop in ['Donate', 'Thanks to', 'His Divine Grace', '©']):
-#                         break
-#                     if re.match(r'^Text \d+$', line):
-#                         break
-#                     if line and len(line) > 3:
-#                         purport_lines.append(line)
-#                 purport = ' '.join(purport_lines)
-            
-#             browser.close()
-            
-#             return {
-#                 'devanagari_verse': devanagari_verse.strip(),
-#                 'sanskrit_verse': sanskrit_verse.strip(),
-#                 'word_meanings': word_meanings.strip(),
-#                 'translation': translation.strip(),
-#                 'purport': purport.strip(),
-#                 'source': 'vedabase.io (fetched)'
-#             }
-            
-#     except Exception as e:
-#         print(f"❌ Error: {e}")
-#         return None
-
 def fetch_from_vedabase(canto, chapter, verse, retry_count=0):
-    """Fetch verse from vedabase.io with better error handling"""
-    max_retries = 3  # Increased from 2
+    """Fetch verse from vedabase.io"""
+    max_retries = 2
     
     try:
         url = f"https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/"
-        print(f"🔍 Fetching (attempt {retry_count + 1}/{max_retries + 1}): {url}")
+        print(f"🔍 Fetching: {url}")
         
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -177,34 +70,19 @@ def fetch_from_vedabase(canto, chapter, verse, retry_count=0):
                 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             )
             page = context.new_page()
-            page.set_default_timeout(90000)  # Increased to 90 seconds
+            page.set_default_timeout(60000)
             
             try:
-                # Navigate with longer timeout
-                page.goto(url, wait_until='domcontentloaded', timeout=90000)
-                time.sleep(4)  # Increased wait time
-                
+                page.goto(url, wait_until='domcontentloaded', timeout=60000)
+                time.sleep(3)
             except PlaywrightTimeout:
-                print("⚠️ Page load timeout")
                 browser.close()
-                
                 if retry_count < max_retries:
-                    print(f"🔄 Retrying... ({retry_count + 1}/{max_retries})")
-                    time.sleep(3)
-                    return fetch_from_vedabase(canto, chapter, verse, retry_count + 1)
-                else:
-                    return None
-            except Exception as e:
-                print(f"⚠️ Navigation error: {e}")
-                browser.close()
-                
-                if retry_count < max_retries:
-                    time.sleep(3)
+                    time.sleep(2)
                     return fetch_from_vedabase(canto, chapter, verse, retry_count + 1)
                 else:
                     return None
             
-            # Rest of the extraction code stays the same
             full_text = page.inner_text('body')
             lines = full_text.split('\n')
             
@@ -272,8 +150,6 @@ def fetch_from_vedabase(canto, chapter, verse, retry_count=0):
             
             browser.close()
             
-            print(f"✅ Extracted successfully")
-            
             return {
                 'devanagari_verse': devanagari_verse.strip(),
                 'sanskrit_verse': sanskrit_verse.strip(),
@@ -284,13 +160,7 @@ def fetch_from_vedabase(canto, chapter, verse, retry_count=0):
             }
             
     except Exception as e:
-        print(f"❌ Error: {type(e).__name__}: {e}")
-        
-        if retry_count < max_retries:
-            print(f"🔄 Retrying due to error...")
-            time.sleep(3)
-            return fetch_from_vedabase(canto, chapter, verse, retry_count + 1)
-        
+        print(f"❌ Error: {e}")
         return None
 
 def get_from_database(canto, chapter, verse):
@@ -333,47 +203,12 @@ def save_to_database(canto, chapter, verse, devanagari_verse, sanskrit_verse, wo
     except:
         return False
 
-# def fetch_verse_hybrid(canto, chapter, verse):
-#     """Hybrid approach"""
-#     verse_ref = f"SB {canto}.{chapter}.{verse}"
-    
-#     db_result = get_from_database(canto, chapter, verse)
-#     if db_result:
-#         return {
-#             'success': True,
-#             'reference': verse_ref,
-#             **db_result,
-#             'url': f'https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/'
-#         }
-    
-#     web_result = fetch_from_vedabase(canto, chapter, verse)
-#     if web_result:
-#         save_to_database(canto, chapter, verse, web_result['devanagari_verse'], 
-#                         web_result['sanskrit_verse'], web_result['word_meanings'],
-#                         web_result['translation'], web_result['purport'])
-        
-#         return {
-#             'success': True,
-#             'reference': verse_ref,
-#             **web_result,
-#             'url': f'https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/'
-#         }
-    
-#     return {
-#         'success': False,
-#         'error': f'Could not fetch verse {verse_ref}'
-#     }
-
 def fetch_verse_hybrid(canto, chapter, verse):
-    """Hybrid approach - optimized"""
+    """Hybrid approach"""
     verse_ref = f"SB {canto}.{chapter}.{verse}"
     
-    print(f"\n📥 Request: {verse_ref}")
-    
-    # Check database first (fast path)
     db_result = get_from_database(canto, chapter, verse)
     if db_result:
-        print(f"✅ Found in database (instant)")
         return {
             'success': True,
             'reference': verse_ref,
@@ -381,12 +216,8 @@ def fetch_verse_hybrid(canto, chapter, verse):
             'url': f'https://vedabase.io/en/library/sb/{canto}/{chapter}/{verse}/'
         }
     
-    # Fetch from web (slow path)
-    print(f"⏳ Not in database, fetching from web (30-60 seconds)...")
     web_result = fetch_from_vedabase(canto, chapter, verse)
-    
     if web_result:
-        # Save to database for next time
         save_to_database(canto, chapter, verse, web_result['devanagari_verse'], 
                         web_result['sanskrit_verse'], web_result['word_meanings'],
                         web_result['translation'], web_result['purport'])
@@ -400,7 +231,7 @@ def fetch_verse_hybrid(canto, chapter, verse):
     
     return {
         'success': False,
-        'error': f'Could not fetch verse {verse_ref}. The site may be slow. Please try again in a moment.'
+        'error': f'Could not fetch verse {verse_ref}'
     }
 
 # YouTube functions
@@ -875,190 +706,82 @@ def translate_text_cascade(text, source_lang='ta'):
 
 # ==================== YOUTUBE TRANSCRIPT ====================
 
-# def get_youtube_transcript(video_id):
-#     """Fetch transcript from YouTube with detailed error handling"""
-#     try:
-#         print(f"📺 Fetching transcript for video: {video_id}")
-        
-#         from langdetect import detect
-        
-#         # List all available transcripts
-#         try:
-#             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-#             print(f"✅ Found transcripts for video")
-            
-#             # Show available languages
-#             available = []
-#             for transcript in transcript_list:
-#                 lang_info = f"{transcript.language} ({transcript.language_code})"
-#                 if transcript.is_generated:
-#                     lang_info += " [auto]"
-#                 available.append(lang_info)
-            
-#             print(f"   Available: {', '.join(available)}")
-            
-#         except Exception as e:
-#             print(f"❌ No transcripts available: {e}")
-#             return None
-        
-#         # Try to get transcript
-#         transcript = None
-        
-#         # Try manual transcripts first
-#         for lang in ['ta', 'hi', 'en', 'te', 'kn', 'ml']:
-#             try:
-#                 transcript = transcript_list.find_manually_created_transcript([lang])
-#                 print(f"✅ Found manual transcript in: {lang}")
-#                 break
-#             except:
-#                 continue
-        
-#         # Try auto-generated if manual not found
-#         if not transcript:
-#             for lang in ['ta', 'hi', 'en', 'te', 'kn', 'ml']:
-#                 try:
-#                     transcript = transcript_list.find_generated_transcript([lang])
-#                     print(f"✅ Found auto transcript in: {lang}")
-#                     break
-#                 except:
-#                     continue
-        
-#         if not transcript:
-#             print(f"❌ Could not find any usable transcript")
-#             return None
-        
-#         # Fetch the transcript
-#         segments = transcript.fetch()
-#         full_text = ' '.join([segment['text'] for segment in segments])
-        
-#         # Detect language
-#         try:
-#             lang_code = detect(full_text)
-#         except:
-#             lang_code = transcript.language_code
-        
-#         print(f"✅ Transcript fetched: {len(full_text)} chars, language: {lang_code}")
-        
-#         return {
-#             'text': full_text,
-#             'language': lang_code,
-#             'segments': segments
-#         }
-        
-#     except Exception as e:
-#         print(f"❌ Transcript error: {e}")
-#         import traceback
-#         traceback.print_exc()
-#         return None
-
 def get_youtube_transcript(video_id):
-    """Fetch transcript from YouTube - improved version"""
+    """Fetch transcript from YouTube with detailed error handling"""
     try:
-        print(f"📺 Fetching transcript for: {video_id}")
-        print(f"   URL: https://www.youtube.com/watch?v={video_id}")
+        print(f"📺 Fetching transcript for video: {video_id}")
         
         from langdetect import detect
         
-        # Get all available transcripts
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        
-        print(f"✅ Transcripts available for video")
-        
         # List all available transcripts
-        all_transcripts = []
-        for t in transcript_list:
-            info = f"{t.language} ({t.language_code})"
-            if t.is_generated:
-                info += " [auto-generated]"
-            else:
-                info += " [manual]"
-            all_transcripts.append(info)
-            print(f"   - {info}")
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            print(f"✅ Found transcripts for video")
+            
+            # Show available languages
+            available = []
+            for transcript in transcript_list:
+                lang_info = f"{transcript.language} ({transcript.language_code})"
+                if transcript.is_generated:
+                    lang_info += " [auto]"
+                available.append(lang_info)
+            
+            print(f"   Available: {', '.join(available)}")
+            
+        except Exception as e:
+            print(f"❌ No transcripts available: {e}")
+            return None
         
-        # Priority order: manual Tamil > auto Tamil > manual Hindi > auto Hindi > any
+        # Try to get transcript
         transcript = None
         
-        # Try manual Tamil first
-        try:
-            transcript = transcript_list.find_manually_created_transcript(['ta'])
-            print(f"✅ Using manual Tamil transcript")
-        except:
-            pass
-        
-        # Try auto-generated Tamil
-        if not transcript:
+        # Try manual transcripts first
+        for lang in ['ta', 'hi', 'en', 'te', 'kn', 'ml']:
             try:
-                transcript = transcript_list.find_generated_transcript(['ta'])
-                print(f"✅ Using auto-generated Tamil transcript")
+                transcript = transcript_list.find_manually_created_transcript([lang])
+                print(f"✅ Found manual transcript in: {lang}")
+                break
             except:
-                pass
+                continue
         
-        # Try Hindi
+        # Try auto-generated if manual not found
         if not transcript:
-            try:
-                transcript = transcript_list.find_transcript(['hi'])
-                print(f"✅ Using Hindi transcript")
-            except:
-                pass
-        
-        # Try English
-        if not transcript:
-            try:
-                transcript = transcript_list.find_transcript(['en'])
-                print(f"✅ Using English transcript")
-            except:
-                pass
-        
-        # Try ANY available transcript
-        if not transcript:
-            try:
-                available = list(transcript_list)
-                if available:
-                    transcript = available[0]
-                    print(f"✅ Using first available: {transcript.language_code}")
-            except:
-                pass
+            for lang in ['ta', 'hi', 'en', 'te', 'kn', 'ml']:
+                try:
+                    transcript = transcript_list.find_generated_transcript([lang])
+                    print(f"✅ Found auto transcript in: {lang}")
+                    break
+                except:
+                    continue
         
         if not transcript:
-            print(f"❌ No usable transcript found")
+            print(f"❌ Could not find any usable transcript")
             return None
         
-        # Fetch transcript content
-        print(f"📥 Downloading transcript...")
+        # Fetch the transcript
         segments = transcript.fetch()
-        
-        if not segments:
-            print(f"❌ Transcript is empty")
-            return None
-        
-        # Combine all text
-        full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
-        
-        if not full_text or len(full_text) < 10:
-            print(f"❌ Transcript too short: {len(full_text)} chars")
-            return None
+        full_text = ' '.join([segment['text'] for segment in segments])
         
         # Detect language
         try:
-            detected_lang = detect(full_text[:500])  # Use first 500 chars for detection
-            print(f"🔍 Detected language: {detected_lang}")
+            lang_code = detect(full_text)
         except:
-            detected_lang = transcript.language_code
+            lang_code = transcript.language_code
         
-        print(f"✅ Transcript success: {len(full_text)} chars, {len(segments)} segments")
+        print(f"✅ Transcript fetched: {len(full_text)} chars, language: {lang_code}")
         
         return {
             'text': full_text,
-            'language': detected_lang,
-            'segments': segments,
-            'language_name': transcript.language
+            'language': lang_code,
+            'segments': segments
         }
         
     except Exception as e:
-        print(f"❌ Transcript error: {type(e).__name__}: {e}")
+        print(f"❌ Transcript error: {e}")
         import traceback
         traceback.print_exc()
         return None
+
 
 # Routes
 @app.before_request
