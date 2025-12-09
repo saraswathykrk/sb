@@ -476,7 +476,16 @@
             const canto = document.getElementById('canto').value;
             const chapter = document.getElementById('chapter').value;
             const verse = document.getElementById('verse').value;
-            const url = `https://vedabase.io/en/library/sb/${canto}/${chapter}/${verse}/`;
+            
+            let url;
+            if (verse && verse.trim() !== '') {
+                // If verse provided, open specific verse
+                url = `https://vedabase.io/en/library/sb/${canto}/${chapter}/${verse}/`;
+            } else {
+                // If no verse, open chapter advanced view
+                url = `https://vedabase.io/en/library/sb/${canto}/${chapter}/advanced-view/`;
+            }
+            
             window.open(url, '_blank');
         });
 
