@@ -308,24 +308,42 @@ def build_video_mapping():
                 video_id = video_data.get('id')
                 title = video_data.get('title', '')
                 
+                # Print first 10 titles to see format
+                if line_count <= 10:
+                    print(f"  Title {line_count}: {title}")
+                
                 if not video_id or not title:
                     continue
                 
                 title_lower = title.lower()
                 
                 # Try multiple patterns
-                match = re.search(r'(\d+)\.(\d+)', title_lower)
-                if match:
-                    canto = int(match.group(1))
-                    chapter = int(match.group(2))
-                    
-                    if 1 <= canto <= 12:
-                        mapping[(canto, chapter)] = video_id
-                        print(f"  ✅ [{canto}.{chapter}] {title[:60]}")
+                patterns = [
+                    r'sb\s*(\d+)\.(\d+)',  # SB 3.1
+                    r'canto\s*(\d+)\s*chapter\s*(\d+)',  # Canto 3 Chapter 1
+                    r'(\d+)\.(\d+)',  # 3.1
+                    r'srimad.*?(\d+)\.(\d+)',  # Srimad Bhagavatam 3.1
+                ]
+                
+                matched = False
+                for pattern in patterns:
+                    match = re.search(pattern, title_lower)
+                    if match:
+                        canto = int(match.group(1))
+                        chapter = int(match.group(2))
+                        
+                        if 1 <= canto <= 12:
+                            mapping[(canto, chapter)] = video_id
+                            if line_count <= 10:
+                                print(f"    ✅ Matched as Canto {canto}.{chapter}")
+                            matched = True
+                            break
+                
+                if not matched and line_count <= 10:
+                    print(f"    ❌ No pattern matched")
                     
             except json.JSONDecodeError as e:
                 print(f"⚠️ JSON parse error on line {line_count}: {e}")
-                print(f"   Line: {line[:200]}")
             except Exception as e:
                 print(f"⚠️ Parse error on line {line_count}: {e}")
         
