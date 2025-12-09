@@ -293,6 +293,7 @@ def fetch_from_vedabase(canto, chapter, verse, retry_count=0):
         
         return None
 
+
 def get_from_database(canto, chapter, verse):
     """Get verse from database"""
     try:
@@ -1059,7 +1060,7 @@ def get_youtube_transcript(video_id):
         import traceback
         traceback.print_exc()
         return None
-
+        
 # Routes
 @app.before_request
 def ensure_database():
