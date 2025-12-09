@@ -952,115 +952,216 @@ def translate_text_cascade(text, source_lang='ta'):
 #         traceback.print_exc()
 #         return None
 
+# def get_youtube_transcript(video_id):
+#     """Fetch transcript from YouTube - improved version"""
+#     try:
+#         print(f"📺 Fetching transcript for: {video_id}")
+#         print(f"   URL: https://www.youtube.com/watch?v={video_id}")
+        
+#         from langdetect import detect
+        
+#         # Get all available transcripts
+#         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        
+#         print(f"✅ Transcripts available for video")
+        
+#         # List all available transcripts
+#         all_transcripts = []
+#         for t in transcript_list:
+#             info = f"{t.language} ({t.language_code})"
+#             if t.is_generated:
+#                 info += " [auto-generated]"
+#             else:
+#                 info += " [manual]"
+#             all_transcripts.append(info)
+#             print(f"   - {info}")
+        
+#         # Priority order: manual Tamil > auto Tamil > manual Hindi > auto Hindi > any
+#         transcript = None
+        
+#         # Try manual Tamil first
+#         try:
+#             transcript = transcript_list.find_manually_created_transcript(['ta'])
+#             print(f"✅ Using manual Tamil transcript")
+#         except:
+#             pass
+        
+#         # Try auto-generated Tamil
+#         if not transcript:
+#             try:
+#                 transcript = transcript_list.find_generated_transcript(['ta'])
+#                 print(f"✅ Using auto-generated Tamil transcript")
+#             except:
+#                 pass
+        
+#         # Try Hindi
+#         if not transcript:
+#             try:
+#                 transcript = transcript_list.find_transcript(['hi'])
+#                 print(f"✅ Using Hindi transcript")
+#             except:
+#                 pass
+        
+#         # Try English
+#         if not transcript:
+#             try:
+#                 transcript = transcript_list.find_transcript(['en'])
+#                 print(f"✅ Using English transcript")
+#             except:
+#                 pass
+        
+#         # Try ANY available transcript
+#         if not transcript:
+#             try:
+#                 available = list(transcript_list)
+#                 if available:
+#                     transcript = available[0]
+#                     print(f"✅ Using first available: {transcript.language_code}")
+#             except:
+#                 pass
+        
+#         if not transcript:
+#             print(f"❌ No usable transcript found")
+#             return None
+        
+#         # Fetch transcript content
+#         print(f"📥 Downloading transcript...")
+#         segments = transcript.fetch()
+        
+#         if not segments:
+#             print(f"❌ Transcript is empty")
+#             return None
+        
+#         # Combine all text
+#         full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
+        
+#         if not full_text or len(full_text) < 10:
+#             print(f"❌ Transcript too short: {len(full_text)} chars")
+#             return None
+        
+#         # Detect language
+#         try:
+#             detected_lang = detect(full_text[:500])  # Use first 500 chars for detection
+#             print(f"🔍 Detected language: {detected_lang}")
+#         except:
+#             detected_lang = transcript.language_code
+        
+#         print(f"✅ Transcript success: {len(full_text)} chars, {len(segments)} segments")
+        
+#         return {
+#             'text': full_text,
+#             'language': detected_lang,
+#             'segments': segments,
+#             'language_name': transcript.language
+#         }
+        
+#     except Exception as e:
+#         print(f"❌ Transcript error: {type(e).__name__}: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return None
+
+
 def get_youtube_transcript(video_id):
-    """Fetch transcript from YouTube - improved version"""
+    """Fetch transcript from YouTube - multiple methods"""
     try:
         print(f"📺 Fetching transcript for: {video_id}")
         print(f"   URL: https://www.youtube.com/watch?v={video_id}")
         
         from langdetect import detect
         
-        # Get all available transcripts
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        
-        print(f"✅ Transcripts available for video")
-        
-        # List all available transcripts
-        all_transcripts = []
-        for t in transcript_list:
-            info = f"{t.language} ({t.language_code})"
-            if t.is_generated:
-                info += " [auto-generated]"
-            else:
-                info += " [manual]"
-            all_transcripts.append(info)
-            print(f"   - {info}")
-        
-        # Priority order: manual Tamil > auto Tamil > manual Hindi > auto Hindi > any
-        transcript = None
-        
-        # Try manual Tamil first
+        # Method 1: Try standard API
         try:
-            transcript = transcript_list.find_manually_created_transcript(['ta'])
-            print(f"✅ Using manual Tamil transcript")
-        except:
-            pass
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            print(f"✅ Found transcript list")
+            
+            # Try to get ANY available transcript
+            transcript = None
+            for t in transcript_list:
+                try:
+                    print(f"   Trying: {t.language} ({t.language_code})")
+                    transcript = t
+                    break
+                except:
+                    continue
+            
+            if transcript:
+                segments = transcript.fetch()
+                full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
+                
+                if full_text and len(full_text) > 10:
+                    try:
+                        detected_lang = detect(full_text[:500])
+                    except:
+                        detected_lang = transcript.language_code
+                    
+                    print(f"✅ Method 1 success: {len(full_text)} chars")
+                    
+                    return {
+                        'text': full_text,
+                        'language': detected_lang,
+                        'segments': segments
+                    }
+        except Exception as e:
+            print(f"⚠️ Method 1 failed: {e}")
         
-        # Try auto-generated Tamil
-        if not transcript:
-            try:
-                transcript = transcript_list.find_generated_transcript(['ta'])
-                print(f"✅ Using auto-generated Tamil transcript")
-            except:
-                pass
-        
-        # Try Hindi
-        if not transcript:
-            try:
-                transcript = transcript_list.find_transcript(['hi'])
-                print(f"✅ Using Hindi transcript")
-            except:
-                pass
-        
-        # Try English
-        if not transcript:
-            try:
-                transcript = transcript_list.find_transcript(['en'])
-                print(f"✅ Using English transcript")
-            except:
-                pass
-        
-        # Try ANY available transcript
-        if not transcript:
-            try:
-                available = list(transcript_list)
-                if available:
-                    transcript = available[0]
-                    print(f"✅ Using first available: {transcript.language_code}")
-            except:
-                pass
-        
-        if not transcript:
-            print(f"❌ No usable transcript found")
-            return None
-        
-        # Fetch transcript content
-        print(f"📥 Downloading transcript...")
-        segments = transcript.fetch()
-        
-        if not segments:
-            print(f"❌ Transcript is empty")
-            return None
-        
-        # Combine all text
-        full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
-        
-        if not full_text or len(full_text) < 10:
-            print(f"❌ Transcript too short: {len(full_text)} chars")
-            return None
-        
-        # Detect language
+        # Method 2: Try without language preference
         try:
-            detected_lang = detect(full_text[:500])  # Use first 500 chars for detection
-            print(f"🔍 Detected language: {detected_lang}")
-        except:
-            detected_lang = transcript.language_code
+            print(f"   Trying Method 2: Direct fetch...")
+            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            
+            if transcript:
+                full_text = ' '.join([seg['text'].strip() for seg in transcript if seg.get('text')])
+                
+                if full_text and len(full_text) > 10:
+                    try:
+                        detected_lang = detect(full_text[:500])
+                    except:
+                        detected_lang = 'ta'
+                    
+                    print(f"✅ Method 2 success: {len(full_text)} chars")
+                    
+                    return {
+                        'text': full_text,
+                        'language': detected_lang,
+                        'segments': transcript
+                    }
+        except Exception as e:
+            print(f"⚠️ Method 2 failed: {e}")
         
-        print(f"✅ Transcript success: {len(full_text)} chars, {len(segments)} segments")
+        # Method 3: Try with specific language codes
+        for lang_code in ['ta', 'hi', 'en', 'ta-IN', 'hi-IN', 'en-US']:
+            try:
+                print(f"   Trying Method 3 with lang: {lang_code}...")
+                transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[lang_code])
+                
+                if transcript:
+                    full_text = ' '.join([seg['text'].strip() for seg in transcript if seg.get('text')])
+                    
+                    if full_text and len(full_text) > 10:
+                        try:
+                            detected_lang = detect(full_text[:500])
+                        except:
+                            detected_lang = lang_code[:2]
+                        
+                        print(f"✅ Method 3 success ({lang_code}): {len(full_text)} chars")
+                        
+                        return {
+                            'text': full_text,
+                            'language': detected_lang,
+                            'segments': transcript
+                        }
+            except:
+                continue
         
-        return {
-            'text': full_text,
-            'language': detected_lang,
-            'segments': segments,
-            'language_name': transcript.language
-        }
+        print(f"❌ All methods failed for video: {video_id}")
+        return None
         
     except Exception as e:
         print(f"❌ Transcript error: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
         return None
         
+
 # Routes
 @app.before_request
 def ensure_database():
