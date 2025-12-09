@@ -246,7 +246,6 @@ def build_video_mapping():
                 with open(MAPPING_CACHE_FILE, 'r') as f:
                     cached = json.load(f)
                     if time.time() - cached.get('timestamp', 0) < 7 * 24 * 3600:
-                        # Convert string keys back to tuple keys
                         mapping = {}
                         for key_str, video_id in cached.get('mapping', {}).items():
                             canto, chapter = key_str.strip('()').split(',')
@@ -256,44 +255,31 @@ def build_video_mapping():
             except Exception as e:
                 print(f"⚠️ Cache load error: {e}")
         
-        # Test if yt-dlp is available
-        print("🔍 Testing yt-dlp availability...")
-        try:
-            test_result = subprocess.run(['yt-dlp', '--version'], 
-                                        capture_output=True, text=True, timeout=5)
-            print(f"   yt-dlp version: {test_result.stdout.strip()}")
-        except FileNotFoundError:
-            print("❌ yt-dlp command not found!")
-            return {}
-        except Exception as e:
-            print(f"❌ yt-dlp test error: {e}")
-            return {}
+        # Don't test version - just try to use it
+        print("📺 Fetching playlist (skipping version test)...")
         
-        # Fetch from YouTube
-        print(f"📺 Fetching playlist: {PLAYLIST_URL}")
         cmd = ['yt-dlp', '--dump-json', '--flat-playlist', '--skip-download', PLAYLIST_URL]
         
         print(f"   Command: {' '.join(cmd)}")
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        # Increase timeout to 180 seconds
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
         
         print(f"   Return code: {result.returncode}")
         print(f"   Stdout length: {len(result.stdout)} chars")
-        print(f"   Stderr length: {len(result.stderr)} chars")
         
         if result.stderr:
-            print(f"   Stderr: {result.stderr[:500]}")
+            print(f"   Stderr: {result.stderr[:200]}")
         
         if result.returncode != 0:
-            print(f"❌ yt-dlp failed with code {result.returncode}")
-            print(f"   Error: {result.stderr[:1000]}")
+            print(f"❌ yt-dlp failed")
             return {}
         
         if not result.stdout.strip():
-            print(f"❌ yt-dlp returned empty output")
+            print(f"❌ Empty output")
             return {}
         
-        # Parse output
+        # Parse with Tamil pattern
         print("📝 Parsing video data...")
         mapping = {}
         line_count = 0
@@ -308,7 +294,6 @@ def build_video_mapping():
                 video_id = video_data.get('id')
                 title = video_data.get('title', '')
                 
-                # Print first 10 titles to see format
                 if line_count <= 10:
                     print(f"  Title {line_count}: {title}")
                 
@@ -317,12 +302,12 @@ def build_video_mapping():
                 
                 title_lower = title.lower()
                 
-                # Try multiple patterns
+                # Try Tamil pattern first
                 patterns = [
-                    r'skandam\s*(\d+)\s*adhyaayam\s*(\d+)',  # Tamil: Skandam 3 Adhyaayam 1
-                    r'sb\s*(\d+)\.(\d+)',  # SB 3.1
-                    r'canto\s*(\d+)\s*chapter\s*(\d+)',  # Canto 3 Chapter 1
-                    r'(\d+)\.(\d+)',  # 3.1
+                    r'skandam\s*(\d+)\s*adhyaayam\s*(\d+)',
+                    r'sb\s*(\d+)\.(\d+)',
+                    r'canto\s*(\d+)\s*chapter\s*(\d+)',
+                    r'(\d+)\.(\d+)',
                 ]
                 
                 matched = False
@@ -335,28 +320,20 @@ def build_video_mapping():
                         if 1 <= canto <= 12:
                             mapping[(canto, chapter)] = video_id
                             if line_count <= 10:
-                                print(f"    ✅ Matched as Canto {canto}.{chapter}")
+                                print(f"    ✅ Canto {canto}.{chapter}")
                             matched = True
                             break
                 
                 if not matched and line_count <= 10:
-                    print(f"    ❌ No pattern matched")
+                    print(f"    ❌ No match")
                     
-            except json.JSONDecodeError as e:
-                print(f"⚠️ JSON parse error on line {line_count}: {e}")
             except Exception as e:
-                print(f"⚠️ Parse error on line {line_count}: {e}")
+                if line_count <= 10:
+                    print(f"⚠️ Parse error: {e}")
         
-        print(f"\n📊 Results:")
-        print(f"   Total lines processed: {line_count}")
-        print(f"   Videos mapped: {len(mapping)}")
+        print(f"\n📊 Total: {line_count} lines, {len(mapping)} mapped")
         
-        if len(mapping) > 0:
-            print(f"   Sample mappings:")
-            for (c, ch), vid in list(mapping.items())[:5]:
-                print(f"     Canto {c}.{ch} → {vid}")
-        
-        # Save to cache
+        # Save cache
         if len(mapping) > 0:
             try:
                 cache_data = {
@@ -365,22 +342,21 @@ def build_video_mapping():
                 }
                 with open(MAPPING_CACHE_FILE, 'w') as f:
                     json.dump(cache_data, f)
-                print(f"💾 Saved {len(mapping)} videos to cache")
+                print(f"💾 Cached {len(mapping)} videos")
             except Exception as e:
                 print(f"⚠️ Cache save error: {e}")
         
         return mapping
         
     except subprocess.TimeoutExpired:
-        print(f"❌ yt-dlp timeout after 120 seconds")
+        print(f"❌ Timeout after 180 seconds")
         return {}
     except Exception as e:
-        print(f"❌ Mapping error: {e}")
+        print(f"❌ Error: {e}")
         import traceback
         traceback.print_exc()
         return {}
-        
-               
+                 
 @app.route('/debug/mapping', methods=['GET'])
 def debug_mapping():
     """Debug endpoint to see video mappings"""
