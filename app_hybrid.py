@@ -1160,7 +1160,7 @@ def get_youtube_transcript(video_id):
     except Exception as e:
         print(f"❌ Transcript error: {type(e).__name__}: {e}")
         return None
-        
+
 
 # Routes
 @app.before_request
@@ -1207,6 +1207,34 @@ def get_chapter_meaning_route():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/test_transcript/<video_id>', methods=['GET'])
+def test_transcript(video_id):
+    """Test transcript fetching for a specific video"""
+    try:
+        result = get_youtube_transcript(video_id)
+        
+        if result:
+            return jsonify({
+                'success': True,
+                'video_id': video_id,
+                'text_length': len(result['text']),
+                'language': result['language'],
+                'preview': result['text'][:500],
+                'segments_count': len(result.get('segments', []))
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'video_id': video_id,
+                'error': 'No transcript found'
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'video_id': video_id,
+            'error': str(e)
+        })
 
 
 if __name__ == '__main__':

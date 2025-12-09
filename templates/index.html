@@ -528,15 +528,9 @@
             const canto = document.getElementById('canto').value;
             const chapter = document.getElementById('chapter').value;
             
-            document.getElementById('chapterModal').style.display = 'block';
-            document.getElementById('modalTitle').textContent = `Canto ${canto}, Chapter ${chapter} - Explanation`;
-            document.getElementById('modalContent').innerHTML = `
-                <div class="spinner"></div>
-                <p style="text-align: center; color: #667eea; margin-top: 20px;">
-                    Loading chapter explanation...<br>
-                    <small>This may take a moment on first request</small>
-                </p>
-            `;
+            // Show loading
+            result.innerHTML = '<div class="spinner"></div><p style="text-align: center;">Finding video...</p>';
+            result.classList.add('show');
             
             try {
                 const response = await fetch('/chapter_meaning', {
@@ -547,49 +541,33 @@
                 
                 const data = await response.json();
                 
-                if (data.success) {
-                    if (data.no_transcript) {
-                        document.getElementById('modalContent').innerHTML = `
-                            <div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                                <h3 style="color: #856404; margin-bottom: 10px;">⚠️ No Transcript Available</h3>
-                                <p style="color: #856404; line-height: 1.6;">
-                                    ${data.message}
-                                </p>
-                            </div>
-                            <div style="text-align: center;">
-                                <a href="https://www.youtube.com/watch?v=${data.video_id}" target="_blank" class="btn btn-youtube">
-                                    🎬 Watch on YouTube
-                                </a>
-                            </div>
-                        `;
-                    } else if (data.translation) {
-                        document.getElementById('modalContent').innerHTML = `
-                            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 15px;">
-                                <h3 style="color: #667eea; margin-bottom: 10px;">📝 Chapter Explanation:</h3>
-                                <p style="line-height: 1.8; white-space: pre-wrap;">${data.translation}</p>
-                            </div>
-                            <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
-                                <strong>Source:</strong> ${data.source}
+                if (data.success && data.video_id) {
+                    const youtubeUrl = `https://www.youtube.com/watch?v=${data.video_id}`;
+                    window.open(youtubeUrl, '_blank');
+                    
+                    result.innerHTML = `
+                        <div class="verse-card">
+                            <h3>✅ Chapter Commentary Video</h3>
+                            <p style="color: #4a5568; margin: 10px 0;">
+                                Opening Tamil commentary for Canto ${canto}, Chapter ${chapter}
                             </p>
-                            <div style="text-align: center; margin-top: 20px;">
-                                <a href="https://www.youtube.com/watch?v=${data.video_id}" target="_blank" class="btn btn-youtube">
-                                    🎬 Watch on YouTube
-                                </a>
-                            </div>
-                        `;
-                    }
+                            <a href="${youtubeUrl}" target="_blank" class="btn btn-youtube" style="margin-top: 15px; display: inline-flex;">
+                                🎬 Reopen Video
+                            </a>
+                        </div>
+                    `;
                 } else {
-                    document.getElementById('modalContent').innerHTML = `
-                        <div style="background: #fed7d7; color: #c53030; padding: 20px; border-radius: 8px;">
-                            <strong>Error:</strong> ${data.error}
+                    result.innerHTML = `
+                        <div class="error">
+                            <strong>Video Not Found</strong><br>
+                            No commentary video available for Canto ${canto}, Chapter ${chapter}
                         </div>
                     `;
                 }
-                
             } catch (error) {
-                document.getElementById('modalContent').innerHTML = `
-                    <div style="background: #fed7d7; color: #c53030; padding: 20px; border-radius: 8px;">
-                        <strong>Error:</strong> ${error.message}
+                result.innerHTML = `
+                    <div class="error">
+                        <strong>Error:</strong> Could not find video. Please try again.
                     </div>
                 `;
             }
