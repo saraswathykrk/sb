@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Śrīmad-Bhāgavatam Verse Finder</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -13,7 +13,7 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
@@ -22,81 +22,138 @@
         .container {
             max-width: 900px;
             margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
         }
 
         .header {
             text-align: center;
-            color: white;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
         }
 
         .header h1 {
             font-size: 2.5em;
+            color: #2d3748;
             margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
         }
 
-        .card {
-            background: white;
-            border-radius: 15px;
+        .header p {
+            color: #718096;
+            font-size: 1.1em;
+        }
+
+        .form-section {
+            background: #f7fafc;
             padding: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            margin-bottom: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
         }
 
-        .input-group {
+        .form-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 15px;
             margin-bottom: 20px;
         }
 
-        .input-field label {
-            margin-bottom: 5px;
-            font-weight: 600;
-            color: #333;
+        .form-group label {
             display: block;
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 0.9em;
         }
 
-        .input-field input {
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 16px;
+        .form-group input {
             width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
         }
 
         .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .btn-primary {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border: none;
-            padding: 15px 30px;
-            font-size: 18px;
-            font-weight: 600;
-            border-radius: 8px;
-            cursor: pointer;
-            width: 100%;
-            transition: transform 0.2s;
         }
 
-        .btn:hover {
+        .btn-primary:hover {
             transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
         }
 
-        .loading {
-            text-align: center;
-            padding: 20px;
-            display: none;
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(240, 147, 251, 0.4);
+        }
+
+        .btn-vedabase {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .btn-vedabase:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(79, 172, 254, 0.4);
+        }
+
+        .btn-youtube {
+            background: linear-gradient(135deg, #ff0844 0%, #ffb199 100%);
+            color: white;
+        }
+
+        .btn-youtube:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(255, 8, 68, 0.4);
         }
 
         .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
             border-radius: 50%;
             width: 40px;
             height: 40px;
             animation: spin 1s linear infinite;
-            margin: 0 auto;
+            margin: 20px auto;
         }
 
         @keyframes spin {
@@ -104,126 +161,140 @@
             100% { transform: rotate(360deg); }
         }
 
-        .result {
-            display: none;
-        }
-
         .result-section {
-            margin-bottom: 25px;
+            display: none;
+            margin-top: 30px;
         }
 
-        .result-section h3 {
+        .result-section.show {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .verse-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .verse-card h3 {
             color: #667eea;
-            margin-bottom: 10px;
-            font-size: 1.3em;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 5px;
-        }
-
-        .devanagari-text {
-            font-size: 1.8em;
-            line-height: 2.2;
-            color: #333;
-            background: #fff9e6;
-            padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid #ff9800;
-            text-align: center;
-            font-family: 'Noto Sans Devanagari', serif;
-            font-weight: 600;
-        }
-
-        .verse-text {
-            font-size: 1.2em;
-            line-height: 1.8;
-            color: #333;
-            font-style: italic;
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid #667eea;
-        }
-
-        .word-meanings {
-            font-size: 0.95em;
-            line-height: 1.6;
-            color: #666;
-            background: #fff3cd;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid #ffc107;
-        }
-
-        .translation-text {
-            font-size: 1.1em;
-            line-height: 1.7;
-            color: #444;
-            background: #f1f3f5;
-            padding: 15px;
-            border-radius: 8px;
-        }
-
-        .purport-text {
-            font-size: 1em;
-            line-height: 1.8;
-            color: #555;
-            text-align: justify;
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-        }
-
-        .reference {
-            font-size: 1.4em;
-            font-weight: 700;
-            color: #764ba2;
             margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .verse-reference {
             text-align: center;
+            font-size: 1.5em;
+            color: #2d3748;
+            font-weight: 700;
+            margin-bottom: 25px;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            border-radius: 10px;
+        }
+
+        .devanagari {
+            font-family: 'Noto Sans Devanagari', sans-serif;
+            font-size: 1.4em;
+            line-height: 2;
+            color: #2d3748;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .sanskrit {
+            font-style: italic;
+            color: #4a5568;
+            line-height: 1.8;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .content-text {
+            color: #2d3748;
+            line-height: 1.8;
+            text-align: justify;
         }
 
         .source-badge {
             display: inline-block;
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 0.8em;
-            margin-left: 10px;
-        }
-
-        .badge-database {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .badge-web {
-            background: #cce5ff;
-            color: #004085;
-        }
-
-        .error {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 8px;
-            display: none;
+            padding: 6px 12px;
+            background: #48bb78;
+            color: white;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
             margin-top: 15px;
         }
 
-        #sourceLink:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
         }
 
-        .source-link-container {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 2px solid #e0e0e0;
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            overflow-y: auto;
         }
 
-        .source-link-label {
-            color: #666;
-            margin-bottom: 10px;
-            font-size: 0.9em;
+        .modal-content {
+            max-width: 800px;
+            margin: 50px auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 30px;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .modal-close:hover {
+            color: #333;
+        }
+
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .button-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .container {
+                padding: 20px;
+            }
         }
     </style>
 </head>
@@ -231,127 +302,76 @@
     <div class="container">
         <div class="header">
             <h1>🕉️ Śrīmad-Bhāgavatam Verse Finder</h1>
-            <p>Complete verses with Devanagari, Sanskrit, and translations</p>
+            <p>Search and explore verses from the timeless wisdom</p>
         </div>
 
-        <div class="card">
+        <div class="form-section">
             <form id="verseForm">
-                <div class="input-group">
-                    <div class="input-field">
+                <div class="form-grid">
+                    <div class="form-group">
                         <label for="canto">Canto</label>
-                        <input type="number" id="canto" name="canto" min="1" max="12" required placeholder="1-12" value="3">
+                        <input type="number" id="canto" name="canto" min="1" max="12" value="3" required>
                     </div>
-                    <div class="input-field">
+                    <div class="form-group">
                         <label for="chapter">Chapter</label>
-                        <input type="number" id="chapter" name="chapter" min="1" required placeholder="1" value="1">
+                        <input type="number" id="chapter" name="chapter" min="1" value="1" required>
                     </div>
-                    <div class="input-field">
+                    <div class="form-group">
                         <label for="verse">Verse</label>
-                        <input type="number" id="verse" name="verse" min="1" required placeholder="1" value="1">
+                        <input type="number" id="verse" name="verse" min="1" value="1" required>
                     </div>
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
-                    <button type="submit" class="btn" id="fetchBtn">🔍 Fetch Verse</button>
-                    <button type="button" class="btn" id="chapterMeaningBtn" 
-                            style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                        🎬 Chapter Meaning
+
+                <div class="button-grid">
+                    <button type="submit" class="btn btn-primary" id="fetchBtn">
+                        🔍 Fetch Verse
+                    </button>
+                    <button type="button" class="btn btn-vedabase" id="vedabaseBtn">
+                        📖 View on Vedabase
+                    </button>
+                    <button type="button" class="btn btn-youtube" id="youtubeBtn">
+                        🎬 Watch Chapter on YouTube
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="chapterMeaningBtn">
+                        📝 Chapter Explanation
                     </button>
                 </div>
             </form>
-
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p style="margin-top: 10px; color: #667eea;">Fetching verse from Vedabase.io...</p>
-            </div>
-
-            <div class="error" id="error"></div>
         </div>
 
-        <div class="card result" id="result">
-            <div class="reference" id="reference"></div>
-            
-            <!-- DEVANAGARI SECTION -->
-            <div class="result-section" id="devanagariSection">
-                <h3>🔱 Devanagari (Sanskrit Original)</h3>
-                <div class="devanagari-text" id="devanagariVerse"></div>
-            </div>
-
-            <!-- ROMANIZED SANSKRIT SECTION -->
-            <div class="result-section" id="verseSection">
-                <h3>📜 Sanskrit Verse (Romanized)</h3>
-                <div class="verse-text" id="sanskritVerse"></div>
-            </div>
-
-            <!-- WORD MEANINGS SECTION -->
-            <div class="result-section" id="wordSection">
-                <h3>📖 Word-for-Word Meanings</h3>
-                <div class="word-meanings" id="wordMeanings"></div>
-            </div>
-
-            <!-- TRANSLATION SECTION -->
-            <div class="result-section" id="translationSection">
-                <h3>🌟 Translation</h3>
-                <div class="translation-text" id="translation"></div>
-            </div>
-
-            <!-- PURPORT SECTION -->
-            <div class="result-section" id="purportSection">
-                <h3>💡 Purport</h3>
-                <div class="purport-text" id="purport"></div>
-            </div>
-
-            <!-- SOURCE LINK - PROMINENT -->
-            <div class="source-link-container">
-                <p class="source-link-label">Read directly from Vedabase</p>
-                <a href="#" id="sourceLink" target="_blank" 
-                   style="display: inline-block; 
-                          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                          color: white;
-                          padding: 12px 30px;
-                          border-radius: 8px;
-                          text-decoration: none;
-                          font-weight: 600;
-                          font-size: 1.1em;
-                          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                          transition: transform 0.2s, box-shadow 0.2s;">
-                    📚 View Verse directly on Vedabase.io →
-                </a>
-            </div>
-        </div>
+        <div id="result" class="result-section"></div>
     </div>
+
     <!-- Chapter Meaning Modal -->
-    <div id="chapterModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; overflow-y: auto;">
-        <div style="max-width: 800px; margin: 50px auto; background: white; border-radius: 15px; padding: 30px; position: relative;">
-            <button id="closeModal" style="position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 30px; cursor: pointer; color: #999;">&times;</button>
-            
+    <div id="chapterModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" id="closeModal">&times;</button>
             <h2 style="color: #667eea; margin-bottom: 20px;" id="modalTitle">Chapter Meaning</h2>
-            
-            <div id="modalContent" style="line-height: 1.8; color: #333;">
-                <div class="spinner" style="margin: 50px auto;"></div>
-                <p style="text-align: center; color: #667eea;">Fetching chapter meaning...</p>
-            </div>
-            
-            <div id="youtubeLink" style="text-align: center; margin-top: 20px; display: none;">
-                <a href="#" target="_blank" 
-                style="display: inline-block; background: #ff0000; color: white; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: 600;">
-                    🎬 Watch on YouTube
-                </a>
+            <div id="modalContent">
+                <div class="spinner"></div>
+                <p style="text-align: center; color: #667eea;">Loading...</p>
             </div>
         </div>
     </div>
 
     <script>
-        document.getElementById('verseForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
+        const form = document.getElementById('verseForm');
+        const result = document.getElementById('result');
+        const fetchBtn = document.getElementById('fetchBtn');
+        const vedabaseBtn = document.getElementById('vedabaseBtn');
+        const youtubeBtn = document.getElementById('youtubeBtn');
+        const chapterMeaningBtn = document.getElementById('chapterMeaningBtn');
 
+        // Fetch Verse
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
             const canto = document.getElementById('canto').value;
             const chapter = document.getElementById('chapter').value;
             const verse = document.getElementById('verse').value;
 
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('result').style.display = 'none';
-            document.getElementById('error').style.display = 'none';
-            document.getElementById('fetchBtn').disabled = true;
+            result.innerHTML = '<div class="spinner"></div>';
+            result.classList.add('show');
 
             try {
                 const response = await fetch('/fetch_verse', {
@@ -361,61 +381,122 @@
                 });
 
                 const data = await response.json();
-                console.log('Received data:', data);
-
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('fetchBtn').disabled = false;
 
                 if (data.success) {
-                    // Show reference
-                    document.getElementById('reference').innerHTML = data.reference + 
-                        (data.source ? `<span class="source-badge ${data.source.includes('database') ? 'badge-database' : 'badge-web'}">${data.source}</span>` : '');
-
-                    // Show ALL sections
-                    document.getElementById('devanagariVerse').textContent = data.devanagari_verse || '(Not available)';
-                    document.getElementById('sanskritVerse').textContent = data.sanskrit_verse || '(Not available)';
-                    document.getElementById('wordMeanings').textContent = data.word_meanings || '(Not available)';
-                    document.getElementById('translation').textContent = data.translation || '(Not available)';
-                    document.getElementById('purport').textContent = data.purport || '(Not available)';
-
-                    // Set the Vedabase link
-                    document.getElementById('sourceLink').href = data.url;
-                    
-                    document.getElementById('result').style.display = 'block';
-                    document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
+                    result.innerHTML = `
+                        <div class="verse-reference">${data.reference}</div>
+                        
+                        ${data.devanagari_verse ? `
+                        <div class="verse-card">
+                            <h3>📿 Devanagari</h3>
+                            <div class="devanagari">${data.devanagari_verse}</div>
+                        </div>
+                        ` : ''}
+                        
+                        ${data.sanskrit_verse ? `
+                        <div class="verse-card">
+                            <h3>🔤 Sanskrit Transliteration</h3>
+                            <div class="sanskrit">${data.sanskrit_verse}</div>
+                        </div>
+                        ` : ''}
+                        
+                        ${data.word_meanings ? `
+                        <div class="verse-card">
+                            <h3>📚 Word-for-Word Meaning</h3>
+                            <div class="content-text">${data.word_meanings}</div>
+                        </div>
+                        ` : ''}
+                        
+                        ${data.translation ? `
+                        <div class="verse-card">
+                            <h3>🌟 Translation</h3>
+                            <div class="content-text">${data.translation}</div>
+                        </div>
+                        ` : ''}
+                        
+                        ${data.purport ? `
+                        <div class="verse-card">
+                            <h3>💡 Purport</h3>
+                            <div class="content-text">${data.purport}</div>
+                        </div>
+                        ` : ''}
+                        
+                        <span class="source-badge">Source: ${data.source}</span>
+                    `;
                 } else {
-                    document.getElementById('error').textContent = data.error;
-                    document.getElementById('error').style.display = 'block';
+                    result.innerHTML = `<div class="error"><strong>Error:</strong> ${data.error}</div>`;
                 }
             } catch (error) {
-                console.error('Fetch error:', error);
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('fetchBtn').disabled = false;
-                document.getElementById('error').textContent = 'Error: ' + error.message;
-                document.getElementById('error').style.display = 'block';
+                result.innerHTML = `<div class="error"><strong>Error:</strong> ${error.message}</div>`;
             }
         });
 
-        // Chapter Meaning Button
-        document.getElementById('chapterMeaningBtn').addEventListener('click', async () => {
+        // View on Vedabase Button
+        vedabaseBtn.addEventListener('click', () => {
+            const canto = document.getElementById('canto').value;
+            const chapter = document.getElementById('chapter').value;
+            const verse = document.getElementById('verse').value;
+            const url = `https://vedabase.io/en/library/sb/${canto}/${chapter}/${verse}/`;
+            window.open(url, '_blank');
+        });
+
+        // Watch Chapter on YouTube Button
+        youtubeBtn.addEventListener('click', async () => {
+            const canto = document.getElementById('canto').value;
+            const chapter = document.getElementById('chapter').value;
+
+            // Show loading
+            result.innerHTML = '<div class="spinner"></div><p style="text-align: center;">Finding YouTube video...</p>';
+            result.classList.add('show');
+
+            try {
+                const response = await fetch('/chapter_meaning', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ canto, chapter })
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.video_id) {
+                    const youtubeUrl = `https://www.youtube.com/watch?v=${data.video_id}`;
+                    window.open(youtubeUrl, '_blank');
+                    result.innerHTML = `
+                        <div class="verse-card">
+                            <h3>✅ Opening YouTube...</h3>
+                            <p>Video for Canto ${canto}, Chapter ${chapter} is opening in a new tab.</p>
+                            <a href="${youtubeUrl}" target="_blank" class="btn btn-youtube" style="margin-top: 15px;">
+                                🎬 Reopen Video
+                            </a>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `
+                        <div class="error">
+                            <strong>Video not found</strong><br>
+                            No YouTube video found for Canto ${canto}, Chapter ${chapter}.
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error"><strong>Error:</strong> ${error.message}</div>`;
+            }
+        });
+
+        // Chapter Explanation Button
+        chapterMeaningBtn.addEventListener('click', async () => {
             const canto = document.getElementById('canto').value;
             const chapter = document.getElementById('chapter').value;
             
-            // Show modal with progress
             document.getElementById('chapterModal').style.display = 'block';
-            document.getElementById('modalTitle').textContent = `Canto ${canto}, Chapter ${chapter} - Meaning`;
+            document.getElementById('modalTitle').textContent = `Canto ${canto}, Chapter ${chapter} - Explanation`;
             document.getElementById('modalContent').innerHTML = `
-                <div class="spinner" style="margin: 50px auto;"></div>
+                <div class="spinner"></div>
                 <p style="text-align: center; color: #667eea; margin-top: 20px;">
-                    <strong>Processing video...</strong><br><br>
-                    This may take 3-5 minutes for first-time processing:<br>
-                    1️⃣ Downloading audio from YouTube...<br>
-                    2️⃣ Transcribing with AI (Whisper)...<br>
-                    3️⃣ Translating to English...<br><br>
-                    <em>Next time will be instant from cache! ⚡</em>
+                    Loading chapter explanation...<br>
+                    <small>This may take a moment on first request</small>
                 </p>
             `;
-            document.getElementById('youtubeLink').style.display = 'none';
             
             try {
                 const response = await fetch('/chapter_meaning', {
@@ -427,38 +508,47 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    const contentDiv = document.getElementById('modalContent');
-                    
-                    contentDiv.innerHTML = `
-                        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 15px;">
-                            <h3 style="color: #667eea; margin-bottom: 10px;">📝 Chapter Explanation (English):</h3>
-                            <p style="line-height: 1.8; white-space: pre-wrap;">${data.translation}</p>
-                        </div>
-                        ${data.transcript !== data.translation ? `
-                        <details style="background: #fff3cd; padding: 15px; border-radius: 8px;">
-                            <summary style="cursor: pointer; font-weight: 600; color: #856404;">Original Transcript (${data.language})</summary>
-                            <p style="margin-top: 10px; line-height: 1.6; white-space: pre-wrap;">${data.transcript}</p>
-                        </details>
-                        ` : ''}
-                        <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
-                            <strong>Source:</strong> ${data.source}
-                        </p>
-                    `;
-                    
-                    document.getElementById('youtubeLink').style.display = 'block';
-                    document.querySelector('#youtubeLink a').href = `https://www.youtube.com/watch?v=${data.video_id}`;
+                    if (data.no_transcript) {
+                        document.getElementById('modalContent').innerHTML = `
+                            <div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                                <h3 style="color: #856404; margin-bottom: 10px;">⚠️ No Transcript Available</h3>
+                                <p style="color: #856404; line-height: 1.6;">
+                                    ${data.message}
+                                </p>
+                            </div>
+                            <div style="text-align: center;">
+                                <a href="https://www.youtube.com/watch?v=${data.video_id}" target="_blank" class="btn btn-youtube">
+                                    🎬 Watch on YouTube
+                                </a>
+                            </div>
+                        `;
+                    } else if (data.translation) {
+                        document.getElementById('modalContent').innerHTML = `
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 15px;">
+                                <h3 style="color: #667eea; margin-bottom: 10px;">📝 Chapter Explanation:</h3>
+                                <p style="line-height: 1.8; white-space: pre-wrap;">${data.translation}</p>
+                            </div>
+                            <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
+                                <strong>Source:</strong> ${data.source}
+                            </p>
+                            <div style="text-align: center; margin-top: 20px;">
+                                <a href="https://www.youtube.com/watch?v=${data.video_id}" target="_blank" class="btn btn-youtube">
+                                    🎬 Watch on YouTube
+                                </a>
+                            </div>
+                        `;
+                    }
                 } else {
                     document.getElementById('modalContent').innerHTML = `
-                        <div style="background: #f8d7da; color: #721c24; padding: 20px; border-radius: 8px;">
+                        <div style="background: #fed7d7; color: #c53030; padding: 20px; border-radius: 8px;">
                             <strong>Error:</strong> ${data.error}
                         </div>
                     `;
                 }
                 
             } catch (error) {
-                console.error('Error:', error);
                 document.getElementById('modalContent').innerHTML = `
-                    <div style="background: #f8d7da; color: #721c24; padding: 20px; border-radius: 8px;">
+                    <div style="background: #fed7d7; color: #c53030; padding: 20px; border-radius: 8px;">
                         <strong>Error:</strong> ${error.message}
                     </div>
                 `;
@@ -470,7 +560,6 @@
             document.getElementById('chapterModal').style.display = 'none';
         });
 
-        // Close modal on outside click
         document.getElementById('chapterModal').addEventListener('click', (e) => {
             if (e.target.id === 'chapterModal') {
                 document.getElementById('chapterModal').style.display = 'none';

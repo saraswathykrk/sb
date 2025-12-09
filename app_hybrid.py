@@ -356,7 +356,7 @@ def build_video_mapping():
         import traceback
         traceback.print_exc()
         return {}
-                 
+
 @app.route('/debug/mapping', methods=['GET'])
 def debug_mapping():
     """Debug endpoint to see video mappings"""
@@ -419,24 +419,78 @@ def get_video_mapping():
         _VIDEO_MAPPING_CACHE = build_video_mapping()
     return _VIDEO_MAPPING_CACHE
 
+# def get_chapter_meaning(canto, chapter):
+#     """Simple chapter meaning"""
+#     try:
+#         # Check database
+#         conn = sqlite3.connect(DB_PATH)
+#         c = conn.cursor()
+#         c.execute('''SELECT video_id, transcript, translation 
+#                      FROM chapter_meanings WHERE canto=? AND chapter=?''', (canto, chapter))
+#         result = c.fetchone()
+#         conn.close()
+        
+#         if result and result[1]:
+#             return {
+#                 'success': True,
+#                 'video_id': result[0],
+#                 'transcript': result[1],
+#                 'translation': result[2],
+#                 'source': 'database'
+#             }
+        
+#         # Get video ID
+#         mapping = get_video_mapping()
+#         video_id = mapping.get((int(canto), int(chapter)))
+        
+#         if not video_id:
+#             return {
+#                 'success': False,
+#                 'error': f'No video found for Canto {canto}, Chapter {chapter}'
+#             }
+        
+#         # Return video info without transcript for now
+#         return {
+#             'success': True,
+#             'video_id': video_id,
+#             'transcript': '',
+#             'translation': '',
+#             'no_transcript': True,
+#             'message': 'Video found! Transcript feature coming soon. Watch on YouTube:',
+#             'source': 'YouTube'
+#         }
+        
+#     except Exception as e:
+#         print(f"❌ Chapter meaning error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return {
+#             'success': False,
+#             'error': str(e)
+#         }
+
+
 def get_chapter_meaning(canto, chapter):
-    """Simple chapter meaning"""
+    """Get chapter meaning with full transcript and translation support"""
     try:
-        # Check database
+        # Check database first
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
+        
         c.execute('''SELECT video_id, transcript, translation 
-                     FROM chapter_meanings WHERE canto=? AND chapter=?''', (canto, chapter))
+                     FROM chapter_meanings 
+                     WHERE canto=? AND chapter=?''', (canto, chapter))
         result = c.fetchone()
         conn.close()
         
         if result and result[1]:
+            print(f"✅ Chapter meaning from database")
             return {
                 'success': True,
                 'video_id': result[0],
                 'transcript': result[1],
                 'translation': result[2],
-                'source': 'database'
+                'source': 'database (cached)'
             }
         
         # Get video ID
@@ -444,30 +498,290 @@ def get_chapter_meaning(canto, chapter):
         video_id = mapping.get((int(canto), int(chapter)))
         
         if not video_id:
+            print(f"⚠️ No video found for Canto {canto}, Chapter {chapter}")
             return {
                 'success': False,
                 'error': f'No video found for Canto {canto}, Chapter {chapter}'
             }
         
-        # Return video info without transcript for now
+        print(f"✅ Found video: {video_id}")
+        
+        # Try to get YouTube transcript
+        transcript_data = get_youtube_transcript(video_id)
+        
+        if not transcript_data:
+            # No transcript available
+            return {
+                'success': True,
+                'video_id': video_id,
+                'transcript': '',
+                'translation': '',
+                'no_transcript': True,
+                'message': 'This video does not have captions/transcripts available on YouTube. Please watch the video directly.',
+                'source': 'YouTube (no transcript)'
+            }
+        
+        original_text = transcript_data['text']
+        language = transcript_data['language']
+        
+        print(f"📝 Transcript: {len(original_text)} chars, language: {language}")
+        
+        # Translate if needed
+        translated_text = original_text
+        
+        if language in ['ta', 'hi', 'te', 'kn', 'ml'] and language != 'en':
+            print(f"🔄 Translating from {language} to English...")
+            
+            translated_text = translate_text_cascade(original_text, language)
+            
+            if not translated_text:
+                translated_text = f"[Translation failed - showing original]\n\n{original_text}"
+                print(f"⚠️ Translation failed, using original")
+        
+        # Save to database
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('''INSERT OR REPLACE INTO chapter_meanings 
+                         (canto, chapter, video_id, transcript, translation) 
+                         VALUES (?, ?, ?, ?, ?)''',
+                      (canto, chapter, video_id, original_text, translated_text))
+            conn.commit()
+            conn.close()
+            print(f"💾 Saved to database")
+        except Exception as e:
+            print(f"⚠️ Database save failed: {e}")
+        
         return {
             'success': True,
             'video_id': video_id,
-            'transcript': '',
-            'translation': '',
-            'no_transcript': True,
-            'message': 'Video found! Transcript feature coming soon. Watch on YouTube:',
-            'source': 'YouTube'
+            'transcript': original_text,
+            'translation': translated_text,
+            'language': language,
+            'source': 'YouTube transcript (with translation)'
         }
         
     except Exception as e:
-        print(f"❌ Chapter meaning error: {e}")
+        print(f"❌ Error: {e}")
         import traceback
         traceback.print_exc()
         return {
             'success': False,
-            'error': str(e)
+            'error': f'Error: {str(e)}'
         }
+
+
+# ==================== TRANSLATION FUNCTIONS ====================
+
+def translate_with_libretranslate(text, source_lang='ta', target_lang='en'):
+    """Translate using LibreTranslate (free, open source)"""
+    try:
+        print(f"🌐 Translating with LibreTranslate ({source_lang} → {target_lang})")
+        
+        url = "https://libretranslate.com/translate"
+        
+        payload = {
+            "q": text[:5000],  # Limit to 5000 chars
+            "source": source_lang,
+            "target": target_lang,
+            "format": "text"
+        }
+        
+        response = requests.post(url, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            translation = result.get('translatedText', '')
+            print(f"✅ LibreTranslate: {len(translation)} chars")
+            return translation
+        else:
+            print(f"⚠️ LibreTranslate error: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ LibreTranslate error: {e}")
+        return None
+
+def translate_with_mymemory(text, source_lang='ta', target_lang='en'):
+    """Translate using MyMemory (free 1000 requests/day)"""
+    try:
+        print(f"🌐 Translating with MyMemory ({source_lang} → {target_lang})")
+        
+        url = "https://api.mymemory.translated.net/get"
+        
+        lang_map = {
+            'ta': 'ta-IN',
+            'hi': 'hi-IN',
+            'en': 'en-US'
+        }
+        
+        source = lang_map.get(source_lang, source_lang)
+        target = lang_map.get(target_lang, target_lang)
+        
+        # Split text into chunks (MyMemory has 500 char limit per request)
+        chunks = [text[i:i+450] for i in range(0, len(text), 450)]
+        translated_chunks = []
+        
+        for i, chunk in enumerate(chunks[:10]):  # Limit to 10 chunks
+            params = {
+                'q': chunk,
+                'langpair': f'{source}|{target}'
+            }
+            
+            response = requests.get(url, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('responseStatus') == 200:
+                    translated_text = result.get('responseData', {}).get('translatedText', '')
+                    translated_chunks.append(translated_text)
+                    time.sleep(0.5)  # Rate limiting
+                else:
+                    break
+            else:
+                break
+        
+        if translated_chunks:
+            full_translation = ' '.join(translated_chunks)
+            print(f"✅ MyMemory: {len(full_translation)} chars")
+            return full_translation
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"❌ MyMemory error: {e}")
+        return None
+
+def translate_with_googletrans(text, source_lang='ta', target_lang='en'):
+    """Translate using unofficial Google Translate API"""
+    try:
+        print(f"🌐 Translating with Google Translate ({source_lang} → {target_lang})")
+        
+        from googletrans import Translator
+        
+        translator = Translator()
+        
+        # Split into chunks
+        max_chunk = 4000
+        chunks = [text[i:i+max_chunk] for i in range(0, len(text), max_chunk)]
+        translated_chunks = []
+        
+        for i, chunk in enumerate(chunks[:5]):  # Limit to 5 chunks
+            result = translator.translate(chunk, src=source_lang, dest=target_lang)
+            translated_chunks.append(result.text)
+            time.sleep(0.5)
+        
+        full_translation = ' '.join(translated_chunks)
+        print(f"✅ Google Translate: {len(full_translation)} chars")
+        return full_translation
+            
+    except Exception as e:
+        print(f"❌ Google Translate error: {e}")
+        return None
+
+def translate_text_cascade(text, source_lang='ta'):
+    """Try multiple translation services in order"""
+    
+    print(f"\n🔄 Starting translation cascade for {len(text)} chars...")
+    
+    # Try LibreTranslate first
+    translation = translate_with_libretranslate(text, source_lang, 'en')
+    if translation and len(translation) > 50:
+        return translation
+    
+    # Try MyMemory second
+    print("⚠️ LibreTranslate failed, trying MyMemory...")
+    translation = translate_with_mymemory(text, source_lang, 'en')
+    if translation and len(translation) > 50:
+        return translation
+    
+    # Try Google Translate as last resort
+    print("⚠️ MyMemory failed, trying Google Translate...")
+    translation = translate_with_googletrans(text, source_lang, 'en')
+    if translation and len(translation) > 50:
+        return translation
+    
+    print("❌ All translation services failed")
+    return None
+
+# ==================== YOUTUBE TRANSCRIPT ====================
+
+def get_youtube_transcript(video_id):
+    """Fetch transcript from YouTube with detailed error handling"""
+    try:
+        print(f"📺 Fetching transcript for video: {video_id}")
+        
+        from langdetect import detect
+        
+        # List all available transcripts
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            print(f"✅ Found transcripts for video")
+            
+            # Show available languages
+            available = []
+            for transcript in transcript_list:
+                lang_info = f"{transcript.language} ({transcript.language_code})"
+                if transcript.is_generated:
+                    lang_info += " [auto]"
+                available.append(lang_info)
+            
+            print(f"   Available: {', '.join(available)}")
+            
+        except Exception as e:
+            print(f"❌ No transcripts available: {e}")
+            return None
+        
+        # Try to get transcript
+        transcript = None
+        
+        # Try manual transcripts first
+        for lang in ['ta', 'hi', 'en', 'te', 'kn', 'ml']:
+            try:
+                transcript = transcript_list.find_manually_created_transcript([lang])
+                print(f"✅ Found manual transcript in: {lang}")
+                break
+            except:
+                continue
+        
+        # Try auto-generated if manual not found
+        if not transcript:
+            for lang in ['ta', 'hi', 'en', 'te', 'kn', 'ml']:
+                try:
+                    transcript = transcript_list.find_generated_transcript([lang])
+                    print(f"✅ Found auto transcript in: {lang}")
+                    break
+                except:
+                    continue
+        
+        if not transcript:
+            print(f"❌ Could not find any usable transcript")
+            return None
+        
+        # Fetch the transcript
+        segments = transcript.fetch()
+        full_text = ' '.join([segment['text'] for segment in segments])
+        
+        # Detect language
+        try:
+            lang_code = detect(full_text)
+        except:
+            lang_code = transcript.language_code
+        
+        print(f"✅ Transcript fetched: {len(full_text)} chars, language: {lang_code}")
+        
+        return {
+            'text': full_text,
+            'language': lang_code,
+            'segments': segments
+        }
+        
+    except Exception as e:
+        print(f"❌ Transcript error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 
 # Routes
 @app.before_request
@@ -514,6 +828,7 @@ def get_chapter_meaning_route():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5019))
