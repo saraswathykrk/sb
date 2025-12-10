@@ -640,149 +640,107 @@ def get_video_mapping():
 #         }
 
 
-# def get_chapter_meaning(canto, chapter):
-#     """Get chapter meaning with full transcript and translation support"""
-#     try:
-#         # Check database first
-#         conn = sqlite3.connect(DB_PATH)
-#         c = conn.cursor()
-        
-#         c.execute('''SELECT video_id, transcript, translation 
-#                      FROM chapter_meanings 
-#                      WHERE canto=? AND chapter=?''', (canto, chapter))
-#         result = c.fetchone()
-#         conn.close()
-        
-#         if result and result[1]:
-#             print(f"✅ Chapter meaning from database")
-#             return {
-#                 'success': True,
-#                 'video_id': result[0],
-#                 'transcript': result[1],
-#                 'translation': result[2],
-#                 'source': 'database (cached)'
-#             }
-        
-#         # Get video ID
-#         mapping = get_video_mapping()
-#         video_id = mapping.get((int(canto), int(chapter)))
-        
-#         if not video_id:
-#             print(f"⚠️ No video found for Canto {canto}, Chapter {chapter}")
-#             return {
-#                 'success': False,
-#                 'error': f'No video found for Canto {canto}, Chapter {chapter}'
-#             }
-        
-#         print(f"✅ Found video: {video_id}")
-        
-#         # Try to get YouTube transcript
-#         transcript_data = get_youtube_transcript(video_id)
-        
-#         if not transcript_data:
-#             # No transcript available
-#             return {
-#                 'success': True,
-#                 'video_id': video_id,
-#                 'transcript': '',
-#                 'translation': '',
-#                 'no_transcript': True,
-#                 'message': 'This video does not have captions/transcripts available on YouTube. Please watch the video directly.',
-#                 'source': 'YouTube (no transcript)'
-#             }
-        
-#         original_text = transcript_data['text']
-#         language = transcript_data['language']
-        
-#         print(f"📝 Transcript: {len(original_text)} chars, language: {language}")
-        
-#         # Translate if needed
-#         translated_text = original_text
-        
-#         if language in ['ta', 'hi', 'te', 'kn', 'ml'] and language != 'en':
-#             print(f"🔄 Translating from {language} to English...")
-            
-#             translated_text = translate_text_cascade(original_text, language)
-            
-#             if not translated_text:
-#                 translated_text = f"[Translation failed - showing original]\n\n{original_text}"
-#                 print(f"⚠️ Translation failed, using original")
-        
-#         # Save to database
-#         try:
-#             conn = sqlite3.connect(DB_PATH)
-#             c = conn.cursor()
-#             c.execute('''INSERT OR REPLACE INTO chapter_meanings 
-#                          (canto, chapter, video_id, transcript, translation) 
-#                          VALUES (?, ?, ?, ?, ?)''',
-#                       (canto, chapter, video_id, original_text, translated_text))
-#             conn.commit()
-#             conn.close()
-#             print(f"💾 Saved to database")
-#         except Exception as e:
-#             print(f"⚠️ Database save failed: {e}")
-        
-#         return {
-#             'success': True,
-#             'video_id': video_id,
-#             'transcript': original_text,
-#             'translation': translated_text,
-#             'language': language,
-#             'source': 'YouTube transcript (with translation)'
-#         }
-        
-#     except Exception as e:
-#         print(f"❌ Error: {e}")
-#         import traceback
-#         traceback.print_exc()
-#         return {
-#             'success': False,
-#             'error': f'Error: {str(e)}'
-#         }
-
-
-@app.route('/get_chapter_meaning', methods=['POST'])
-def get_chapter_meaning():
-    """Get chapter meaning/commentary - SIMPLIFIED to just return video URL"""
+def get_chapter_meaning(canto, chapter):
+    """Get chapter meaning with full transcript and translation support"""
     try:
-        data = request.json
-        canto = int(data.get('canto', 1))
-        chapter = int(data.get('chapter', 1))
+        # Check database first
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
         
-        print(f"📺 Request: Canto {canto} Chapter {chapter}")
+        c.execute('''SELECT video_id, transcript, translation 
+                     FROM chapter_meanings 
+                     WHERE canto=? AND chapter=?''', (canto, chapter))
+        result = c.fetchone()
+        conn.close()
         
-        # Get video mapping
+        if result and result[1]:
+            print(f"✅ Chapter meaning from database")
+            return {
+                'success': True,
+                'video_id': result[0],
+                'transcript': result[1],
+                'translation': result[2],
+                'source': 'database (cached)'
+            }
+        
+        # Get video ID
         mapping = get_video_mapping()
-        video_id = mapping.get((canto, chapter))
+        video_id = mapping.get((int(canto), int(chapter)))
         
         if not video_id:
-            return jsonify({
+            print(f"⚠️ No video found for Canto {canto}, Chapter {chapter}")
+            return {
                 'success': False,
-                'error': f'No video found for Canto {canto}, Chapter {chapter}.'
-            })
-        
-        youtube_url = f'https://www.youtube.com/watch?v={video_id}'
+                'error': f'No video found for Canto {canto}, Chapter {chapter}'
+            }
         
         print(f"✅ Found video: {video_id}")
         
-        # Just return the video URL - don't try to get transcript
-        return jsonify({
+        # Try to get YouTube transcript
+        transcript_data = get_youtube_transcript(video_id)
+        
+        if not transcript_data:
+            # No transcript available
+            return {
+                'success': True,
+                'video_id': video_id,
+                'transcript': '',
+                'translation': '',
+                'no_transcript': True,
+                'message': 'This video does not have captions/transcripts available on YouTube. Please watch the video directly.',
+                'source': 'YouTube (no transcript)'
+            }
+        
+        original_text = transcript_data['text']
+        language = transcript_data['language']
+        
+        print(f"📝 Transcript: {len(original_text)} chars, language: {language}")
+        
+        # Translate if needed
+        translated_text = original_text
+        
+        if language in ['ta', 'hi', 'te', 'kn', 'ml'] and language != 'en':
+            print(f"🔄 Translating from {language} to English...")
+            
+            translated_text = translate_text_cascade(original_text, language)
+            
+            if not translated_text:
+                translated_text = f"[Translation failed - showing original]\n\n{original_text}"
+                print(f"⚠️ Translation failed, using original")
+        
+        # Save to database
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('''INSERT OR REPLACE INTO chapter_meanings 
+                         (canto, chapter, video_id, transcript, translation) 
+                         VALUES (?, ?, ?, ?, ?)''',
+                      (canto, chapter, video_id, original_text, translated_text))
+            conn.commit()
+            conn.close()
+            print(f"💾 Saved to database")
+        except Exception as e:
+            print(f"⚠️ Database save failed: {e}")
+        
+        return {
             'success': True,
             'video_id': video_id,
-            'youtube_url': youtube_url,
-            'message': f'Opening chapter commentary for Canto {canto}, Chapter {chapter}'
-        })
+            'transcript': original_text,
+            'translation': translated_text,
+            'language': language,
+            'source': 'YouTube transcript (with translation)'
+        }
         
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({
+        return {
             'success': False,
-            'error': str(e)
-        })
-        
-              
+            'error': f'Error: {str(e)}'
+        }
+
+
 # ==================== TRANSLATION FUNCTIONS ====================
 
 def translate_with_libretranslate(text, source_lang='ta', target_lang='en'):

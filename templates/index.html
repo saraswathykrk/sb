@@ -99,6 +99,54 @@
             font-size: 0.8em;
             color: #718096;
         }
+
+        /* Button hover and active states */
+        .action-buttons button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 0.95em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(102, 126, 234, 0.2);
+        }
+
+        .action-buttons button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.3);
+            background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%);
+        }
+
+        .action-buttons button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+        }
+
+        .action-buttons button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Reopen button styling */
+        .reopen-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .reopen-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
     
         .form-section {
             background: #f8f9fa;
@@ -612,48 +660,38 @@
             const canto = document.getElementById('canto').value;
             const chapter = document.getElementById('chapter').value;
             
-            // Show loading
-            result.innerHTML = '<div class="spinner"></div><p style="text-align: center;">Finding video...</p>';
-            result.classList.add('show');
+            if (!canto || !chapter) {
+                showResult('error', 'Please enter Canto and Chapter numbers');
+                return;
+            }
+            
+            resultDiv.innerHTML = '<div class="loading">Finding video...</div>';
             
             try {
-                const response = await fetch('/chapter_meaning', {
+                const response = await fetch('/get_chapter_meaning', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({ canto, chapter })
                 });
                 
                 const data = await response.json();
                 
-                if (data.success && data.video_id) {
-                    const youtubeUrl = `https://www.youtube.com/watch?v=${data.video_id}`;
-                    window.open(youtubeUrl, '_blank');
+                if (data.success) {
+                    // Just open the video directly
+                    window.open(data.youtube_url, '_blank');
                     
-                    result.innerHTML = `
-                        <div class="verse-card">
-                            <h3>✅ Chapter Commentary Video</h3>
-                            <p style="color: #4a5568; margin: 10px 0;">
-                                Opening Tamil commentary for Canto ${canto}, Chapter ${chapter}
-                            </p>
-                            <a href="${youtubeUrl}" target="_blank" class="btn btn-youtube" style="margin-top: 15px; display: inline-flex;">
-                                🎬 Reopen Video
-                            </a>
-                        </div>
-                    `;
+                    showResult('success', 
+                        `✅ ${data.message || 'Opening video...'}<br><br>` +
+                        `<button class="reopen-btn" onclick="window.open('${data.youtube_url}', '_blank')">` +
+                        `🎬 Reopen Video</button>`
+                    );
                 } else {
-                    result.innerHTML = `
-                        <div class="error">
-                            <strong>Video Not Found</strong><br>
-                            No commentary video available for Canto ${canto}, Chapter ${chapter}
-                        </div>
-                    `;
+                    showResult('error', data.error || 'Failed to find video');
                 }
             } catch (error) {
-                result.innerHTML = `
-                    <div class="error">
-                        <strong>Error:</strong> Could not find video. Please try again.
-                    </div>
-                `;
+                showResult('error', 'Error: ' + error.message);
             }
         });
 
