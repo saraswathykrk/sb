@@ -1602,6 +1602,98 @@ def debug_test_video(canto, chapter):
             'error': str(e),
             'traceback': traceback.format_exc()
         })
+
+
+def get_youtube_transcript_direct(video_id):
+    """Fetch transcript using direct YouTube approach - last resort"""
+    try:
+        print(f"   Method 4: Direct HTML scraping...")
+        
+        import urllib.request
+        import json
+        from html import unescape
+        import re
+        
+        # Get video page
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept-Language': 'en-US,en;q=0.9,ta;q=0.8'
+        }
+        
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as response:
+            html = response.read().decode('utf-8')
+        
+        # Look for caption tracks in page HTML
+        if '"captions":' not in html and 'captionTracks' not in html:
+            print(f"     No caption data found in HTML")
+            return None
+        
+        # Extract caption track URL
+        pattern = r'"captionTracks":\s*(\[.*?\])'
+        match = re.search(pattern, html)
+        
+        if not match:
+            print(f"     Caption tracks not found in HTML")
+            return None
+        
+        tracks_json = match.group(1)
+        tracks = json.loads(tracks_json)
+        
+        if not tracks:
+            print(f"     Caption tracks empty")
+            return None
+        
+        # Get first available track
+        track = tracks[0]
+        caption_url = track.get('baseUrl')
+        
+        if not caption_url:
+            print(f"     No baseUrl in caption track")
+            return None
+        
+        print(f"     Found caption URL, fetching...")
+        
+        # Fetch captions
+        req = urllib.request.Request(caption_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as response:
+            caption_xml = response.read().decode('utf-8')
+        
+        # Parse XML to extract text
+        text_pattern = r'<text[^>]*>(.*?)</text>'
+        texts = re.findall(text_pattern, caption_xml, re.DOTALL)
+        
+        if not texts:
+            print(f"     No text found in captions")
+            return None
+        
+        # Unescape HTML entities and clean
+        full_text = ' '.join([unescape(re.sub(r'<[^>]+>', '', t)) for t in texts])
+        
+        if len(full_text) < 50:
+            print(f"     Text too short: {len(full_text)} chars")
+            return None
+        
+        print(f"   ✅ Direct method success: {len(full_text)} chars")
+        
+        # Detect language
+        try:
+            from langdetect import detect
+            lang = detect(full_text[:500])
+        except:
+            lang = 'ta'
+        
+        return {
+            'text': full_text,
+            'language': lang,
+            'segments': []
+        }
+        
+    except Exception as e:
+        print(f"     Direct method error: {e}")
+        return None
+
         
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5019))
