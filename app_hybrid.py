@@ -1236,10 +1236,121 @@ def translate_text_cascade(text, source_lang='ta'):
 #         print(f"❌ Transcript error: {e}")
 #         return None
 
-def get_youtube_transcript(video_id):
-    """Main transcript fetching function"""
-    return extract_subtitles_comprehensive(video_id)
+# def get_youtube_transcript(video_id):
+#     """Main transcript fetching function"""
+#     return extract_subtitles_comprehensive(video_id)
 
+def get_youtube_transcript(video_id):
+    """Fetch transcript with auto-translation support"""
+    try:
+        print(f"📺 Fetching transcript for: {video_id}")
+        
+        from youtube_transcript_api import YouTubeTranscriptApi
+        from langdetect import detect
+        
+        # Step 1: List all available transcripts
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            print(f"✅ Transcripts available:")
+            available_transcripts = []
+            for t in transcript_list:
+                info = f"{t.language} ({t.language_code})"
+                if t.is_generated:
+                    info += " [auto]"
+                print(f"   - {info}")
+                available_transcripts.append(t)
+            
+            if not available_transcripts:
+                print(f"❌ No transcripts found")
+                return None
+            
+            # Step 2: Try to get English transcript directly
+            try:
+                print(f"   Trying direct English transcript...")
+                transcript = transcript_list.find_transcript(['en'])
+                segments = transcript.fetch()
+                
+                full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
+                
+                if full_text and len(full_text) > 50:
+                    print(f"✅ Found English transcript: {len(full_text)} chars")
+                    return {
+                        'text': full_text,
+                        'language': 'en',
+                        'method': 'Direct English',
+                        'segments': segments
+                    }
+            except:
+                print(f"   No direct English transcript")
+            
+            # Step 3: Get any available transcript and translate to English
+            print(f"   Trying auto-translation to English...")
+            
+            for transcript in available_transcripts:
+                try:
+                    print(f"   Attempting: {transcript.language_code} → English")
+                    
+                    # Translate to English
+                    translated = transcript.translate('en')
+                    segments = translated.fetch()
+                    
+                    full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
+                    
+                    if full_text and len(full_text) > 50:
+                        print(f"✅ SUCCESS! Translated {transcript.language_code} → English: {len(full_text)} chars")
+                        print(f"   Preview: {full_text[:200]}...")
+                        
+                        return {
+                            'text': full_text,
+                            'language': 'en',
+                            'original_language': transcript.language_code,
+                            'method': f'Auto-translated from {transcript.language}',
+                            'segments': segments
+                        }
+                    
+                except Exception as e:
+                    print(f"   ⚠️ Translation failed for {transcript.language_code}: {e}")
+                    continue
+            
+            # Step 4: If translation fails, get original text
+            print(f"   Translation failed, getting original text...")
+            
+            for transcript in available_transcripts:
+                try:
+                    segments = transcript.fetch()
+                    full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
+                    
+                    if full_text and len(full_text) > 50:
+                        try:
+                            detected_lang = detect(full_text[:500])
+                        except:
+                            detected_lang = transcript.language_code
+                        
+                        print(f"✅ Got original text in {transcript.language}: {len(full_text)} chars")
+                        
+                        return {
+                            'text': full_text,
+                            'language': detected_lang,
+                            'method': f'Original {transcript.language}',
+                            'segments': segments
+                        }
+                except:
+                    continue
+            
+            print(f"❌ All methods failed")
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error listing transcripts: {e}")
+            return None
+        
+    except Exception as e:
+        print(f"❌ Transcript error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+        
 # Routes
 @app.before_request
 def ensure_database():
