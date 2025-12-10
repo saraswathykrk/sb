@@ -1440,47 +1440,118 @@ def get_verse():
 #         return jsonify({'success': False, 'error': str(e)})
 
 
-@app.route('/get_chapter_meaning', methods=['POST'])
-def get_chapter_meaning_route():
-    """Get chapter meaning/commentary - just returns video URL"""
+# @app.route('/get_chapter_meaning', methods=['POST'])
+# def get_chapter_meaning_route():
+#     """Get chapter meaning/commentary - just returns video URL"""
+#     try:
+#         data = request.json
+#         canto = int(data.get('canto', 1))
+#         chapter = int(data.get('chapter', 1))
+        
+#         print(f"📺 Request: Canto {canto} Chapter {chapter}")
+        
+#         # Get video mapping
+#         mapping = get_video_mapping()
+#         video_id = mapping.get((canto, chapter))
+        
+#         if not video_id:
+#             return jsonify({
+#                 'success': False,
+#                 'error': f'No video found for Canto {canto}, Chapter {chapter}.'
+#             })
+        
+#         youtube_url = f'https://www.youtube.com/watch?v={video_id}'
+        
+#         print(f"✅ Found video: {video_id}")
+        
+#         # Just return the video URL - no transcript extraction
+#         return jsonify({
+#             'success': True,
+#             'video_id': video_id,
+#             'youtube_url': youtube_url,
+#             'message': f'Opening chapter commentary for Canto {canto}, Chapter {chapter}'
+#         })
+        
+#     except Exception as e:
+#         print(f"❌ Error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({
+#             'success': False,
+#             'error': str(e)
+#         })
+
+@app.route('/open_youtube', methods=['POST'])
+def open_youtube():
+    """Open YouTube video for a chapter"""
     try:
         data = request.json
         canto = int(data.get('canto', 1))
         chapter = int(data.get('chapter', 1))
         
-        print(f"📺 Request: Canto {canto} Chapter {chapter}")
+        print(f"🎬 YouTube request: Canto {canto} Chapter {chapter}")
         
-        # Get video mapping
         mapping = get_video_mapping()
         video_id = mapping.get((canto, chapter))
         
         if not video_id:
             return jsonify({
                 'success': False,
-                'error': f'No video found for Canto {canto}, Chapter {chapter}.'
+                'error': f'No video found for Canto {canto}, Chapter {chapter}'
             })
         
         youtube_url = f'https://www.youtube.com/watch?v={video_id}'
-        
         print(f"✅ Found video: {video_id}")
         
-        # Just return the video URL - no transcript extraction
         return jsonify({
             'success': True,
-            'video_id': video_id,
             'youtube_url': youtube_url,
-            'message': f'Opening chapter commentary for Canto {canto}, Chapter {chapter}'
+            'video_id': video_id
         })
         
     except Exception as e:
         print(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)
         })
 
+
+@app.route('/get_chapter_meaning', methods=['POST'])
+def get_chapter_meaning_route():
+    """Get chapter commentary - same as open_youtube"""
+    try:
+        data = request.json
+        canto = int(data.get('canto', 1))
+        chapter = int(data.get('chapter', 1))
+        
+        print(f"📝 Chapter explanation request: Canto {canto} Chapter {chapter}")
+        
+        mapping = get_video_mapping()
+        video_id = mapping.get((canto, chapter))
+        
+        if not video_id:
+            return jsonify({
+                'success': False,
+                'error': f'No video found for Canto {canto}, Chapter {chapter}'
+            })
+        
+        youtube_url = f'https://www.youtube.com/watch?v={video_id}'
+        print(f"✅ Found video: {video_id}")
+        
+        return jsonify({
+            'success': True,
+            'youtube_url': youtube_url,
+            'video_id': video_id,
+            'message': f'Opening chapter commentary for Canto {canto}, Chapter {chapter}'
+        })
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
 
 @app.route('/test_simple/<video_id>', methods=['GET'])
 def test_simple(video_id):

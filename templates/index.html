@@ -499,7 +499,7 @@
                 We link to original sources and do not host any content.
             </div>
             <p class="footer-small">
-                Made with 🕉️ for spiritual learning
+                🕉️ Made with devotion to assist bhaktas in their spiritual learning. Radhe Radhe!
                 <a href="mailto:srimad.bhagavadham@gmail.com">Contact</a>
             </p>
         </div>
@@ -616,42 +616,44 @@
         youtubeBtn.addEventListener('click', async () => {
             const canto = document.getElementById('canto').value;
             const chapter = document.getElementById('chapter').value;
-
-            // Show loading
-            result.innerHTML = '<div class="spinner"></div><p style="text-align: center;">Finding YouTube video...</p>';
-            result.classList.add('show');
-
+            
+            if (!canto || !chapter) {
+                showResult('error', 'Please enter Canto and Chapter numbers');
+                return;
+            }
+            
+            resultDiv.innerHTML = '<div class="loading">Finding video...</div>';
+            
             try {
-                const response = await fetch('/chapter_meaning', {
+                const response = await fetch('/open_youtube', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({ canto, chapter })
                 });
-
+                
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Server returned an error page. Please check the logs.');
+                }
+                
                 const data = await response.json();
-
-                if (data.success && data.video_id) {
-                    const youtubeUrl = `https://www.youtube.com/watch?v=${data.video_id}`;
-                    window.open(youtubeUrl, '_blank');
-                    result.innerHTML = `
-                        <div class="verse-card">
-                            <h3>✅ Opening YouTube...</h3>
-                            <p>Video for Canto ${canto}, Chapter ${chapter} is opening in a new tab.</p>
-                            <a href="${youtubeUrl}" target="_blank" class="btn btn-youtube" style="margin-top: 15px;">
-                                🎬 Reopen Video
-                            </a>
-                        </div>
-                    `;
+                
+                if (data.success) {
+                    window.open(data.youtube_url, '_blank');
+                    showResult('success', 
+                        `✅ Opening video for Canto ${canto}, Chapter ${chapter}<br><br>` +
+                        `<button class="reopen-btn" onclick="window.open('${data.youtube_url}', '_blank')">` +
+                        `🎬 Reopen Video</button>`
+                    );
                 } else {
-                    result.innerHTML = `
-                        <div class="error">
-                            <strong>Video not found</strong><br>
-                            No YouTube video found for Canto ${canto}, Chapter ${chapter}.
-                        </div>
-                    `;
+                    showResult('error', data.error || 'Video not found');
                 }
             } catch (error) {
-                result.innerHTML = `<div class="error"><strong>Error:</strong> ${error.message}</div>`;
+                console.error('Error:', error);
+                showResult('error', 'Error: ' + error.message);
             }
         });
 
@@ -665,7 +667,7 @@
                 return;
             }
             
-            resultDiv.innerHTML = '<div class="loading">Finding video...</div>';
+            resultDiv.innerHTML = '<div class="loading">Finding chapter commentary...</div>';
             
             try {
                 const response = await fetch('/get_chapter_meaning', {
@@ -676,25 +678,29 @@
                     body: JSON.stringify({ canto, chapter })
                 });
                 
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Server returned an error page. Please check the logs.');
+                }
+                
                 const data = await response.json();
                 
                 if (data.success) {
-                    // Just open the video directly
                     window.open(data.youtube_url, '_blank');
-                    
                     showResult('success', 
-                        `✅ ${data.message || 'Opening video...'}<br><br>` +
+                        `✅ ${data.message || 'Opening chapter commentary...'}<br><br>` +
                         `<button class="reopen-btn" onclick="window.open('${data.youtube_url}', '_blank')">` +
                         `🎬 Reopen Video</button>`
                     );
                 } else {
-                    showResult('error', data.error || 'Failed to find video');
+                    showResult('error', data.error || 'Commentary not found');
                 }
             } catch (error) {
+                console.error('Error:', error);
                 showResult('error', 'Error: ' + error.message);
             }
         });
-
         // Close modal
         document.getElementById('closeModal').addEventListener('click', () => {
             document.getElementById('chapterModal').style.display = 'none';
