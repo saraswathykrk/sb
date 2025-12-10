@@ -1350,7 +1350,7 @@ def get_youtube_transcript(video_id):
         import traceback
         traceback.print_exc()
         return None
-        
+
 # Routes
 @app.before_request
 def ensure_database():
@@ -1397,6 +1397,60 @@ def get_chapter_meaning_route():
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/test_simple/<video_id>', methods=['GET'])
+def test_simple(video_id):
+    """Simple transcript test with detailed output"""
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        
+        result = {
+            'video_id': video_id,
+            'url': f'https://www.youtube.com/watch?v={video_id}'
+        }
+        
+        # Try to list transcripts
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            available = []
+            for t in transcript_list:
+                available.append({
+                    'language': t.language,
+                    'code': t.language_code,
+                    'auto': t.is_generated
+                })
+            
+            result['transcripts_available'] = available
+            result['count'] = len(available)
+            
+            # Try to get first transcript and translate
+            if available:
+                first = list(transcript_list)[0]
+                
+                # Get original
+                segments = first.fetch()
+                orig_text = ' '.join([s['text'] for s in segments[:5]])
+                result['original_sample'] = orig_text
+                result['original_lang'] = first.language_code
+                
+                # Try translate to English
+                try:
+                    translated = first.translate('en')
+                    trans_segments = translated.fetch()
+                    trans_text = ' '.join([s['text'] for s in trans_segments[:5]])
+                    result['translated_sample'] = trans_text
+                    result['translation_success'] = True
+                except Exception as e:
+                    result['translation_error'] = str(e)
+                    result['translation_success'] = False
+            
+        except Exception as e:
+            result['error'] = str(e)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 # def get_youtube_transcript_ytdlp(video_id):
 #     """Extract subtitles using yt-dlp command-line tool"""
