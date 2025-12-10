@@ -716,80 +716,65 @@ def get_verse():
 
 @app.route('/open_youtube', methods=['POST'])
 def open_youtube():
-    """Open YouTube video for a chapter"""
+    """Open YouTube video - SIMPLE VERSION"""
     try:
         data = request.json
         canto = int(data.get('canto', 1))
         chapter = int(data.get('chapter', 1))
         
-        print(f"🎬 YouTube request: Canto {canto} Chapter {chapter}")
+        print(f"🎬 Request: Canto {canto} Chapter {chapter}")
         
+        # Get cached video mapping
         mapping = get_video_mapping()
+        
+        # Look up video ID
         video_id = mapping.get((canto, chapter))
         
         if not video_id:
-            return jsonify({
-                'success': False,
-                'error': f'No video found for Canto {canto}, Chapter {chapter}'
-            })
+            print(f"❌ No video")
+            return jsonify({'success': False, 'error': 'Video not found'})
         
         youtube_url = f'https://www.youtube.com/watch?v={video_id}'
-        print(f"✅ Opening video: {video_id}")
+        print(f"✅ Video: {video_id}")
+        
+        return jsonify({'success': True, 'youtube_url': youtube_url})
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/get_chapter_meaning', methods=['POST'])
+def get_chapter_meaning_handler():
+    """Chapter explanation - SIMPLE VERSION"""
+    try:
+        data = request.json
+        canto = int(data.get('canto', 1))
+        chapter = int(data.get('chapter', 1))
+        
+        print(f"📝 Request: Canto {canto} Chapter {chapter}")
+        
+        # Get cached video mapping
+        mapping = get_video_mapping()
+        
+        # Look up video ID
+        video_id = mapping.get((canto, chapter))
+        
+        if not video_id:
+            print(f"❌ No video")
+            return jsonify({'success': False, 'error': 'Video not found'})
+        
+        youtube_url = f'https://www.youtube.com/watch?v={video_id}'
+        print(f"✅ Video: {video_id}")
         
         return jsonify({
-            'success': True,
+            'success': True, 
             'youtube_url': youtube_url,
-            'video_id': video_id
+            'message': f'Opening commentary for Canto {canto}, Chapter {chapter}'
         })
         
     except Exception as e:
         print(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-@app.route('/get_chapter_meaning', methods=['POST'])
-def get_chapter_meaning_route():
-    """Get chapter commentary - just returns video URL"""
-    try:
-        data = request.json
-        canto = int(data.get('canto', 1))
-        chapter = int(data.get('chapter', 1))
-        
-        print(f"📝 Chapter explanation: Canto {canto} Chapter {chapter}")
-        
-        # Get video mapping
-        mapping = get_video_mapping()
-        video_id = mapping.get((canto, chapter))
-        
-        if not video_id:
-            print(f"❌ No video found")
-            return jsonify({
-                'success': False,
-                'error': f'No video found for Canto {canto}, Chapter {chapter}'
-            })
-        
-        youtube_url = f'https://www.youtube.com/watch?v={video_id}'
-        print(f"✅ Found video: {video_id}")
-        
-        return jsonify({
-            'success': True,
-            'youtube_url': youtube_url,
-            'video_id': video_id,
-            'message': f'Opening chapter commentary for Canto {canto}, Chapter {chapter}'
-        })
-        
-    except Exception as e:
-        print(f"❌ Error in get_chapter_meaning_route: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/test_simple/<video_id>', methods=['GET'])
 def test_simple(video_id):
@@ -845,77 +830,6 @@ def test_simple(video_id):
         
     except Exception as e:
         return jsonify({'error': str(e)})
-
-@app.route('/test_transcript/<video_id>', methods=['GET'])
-def test_transcript(video_id):
-    """Test transcript fetching for a specific video"""
-    try:
-        result = get_youtube_transcript(video_id)
-        
-        if result:
-            return jsonify({
-                'success': True,
-                'video_id': video_id,
-                'text_length': len(result['text']),
-                'language': result['language'],
-                'preview': result['text'][:500],
-                'segments_count': len(result.get('segments', []))
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'video_id': video_id,
-                'error': 'No transcript found'
-            })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'video_id': video_id,
-            'error': str(e)
-        })
-
-
-@app.route('/debug/test_video/<int:canto>/<int:chapter>', methods=['GET'])
-def debug_test_video(canto, chapter):
-    """Debug endpoint to test video and transcript"""
-    try:
-        # Get video mapping
-        mapping = get_video_mapping()
-        video_id = mapping.get((canto, chapter))
-        
-        result = {
-            'mapping_total': len(mapping),
-            'canto': canto,
-            'chapter': chapter,
-            'video_id': video_id,
-            'has_video': video_id is not None
-        }
-        
-        if video_id:
-            result['youtube_url'] = f'https://www.youtube.com/watch?v={video_id}'
-            
-            # Try to get transcript
-            print(f"\n{'='*60}")
-            print(f"TESTING VIDEO: {video_id}")
-            print(f"{'='*60}\n")
-            
-            transcript = get_youtube_transcript(video_id)
-            
-            if transcript:
-                result['transcript_found'] = True
-                result['transcript_length'] = len(transcript['text'])
-                result['transcript_language'] = transcript['language']
-                result['transcript_preview'] = transcript['text'][:200]
-            else:
-                result['transcript_found'] = False
-        
-        return jsonify(result)
-        
-    except Exception as e:
-        return jsonify({
-            'error': str(e),
-            'traceback': traceback.format_exc()
-        })
 
      
 
