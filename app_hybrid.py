@@ -549,46 +549,6 @@ def get_video_mapping():
         _VIDEO_MAPPING_CACHE = build_video_mapping()
     return _VIDEO_MAPPING_CACHE
 
-@app.route('/get_chapter_meaning', methods=['POST'])
-def get_chapter_meaning():
-    """Get chapter meaning/commentary - SIMPLIFIED to just return video URL"""
-    try:
-        data = request.json
-        canto = int(data.get('canto', 1))
-        chapter = int(data.get('chapter', 1))
-        
-        print(f"📺 Request: Canto {canto} Chapter {chapter}")
-        
-        # Get video mapping
-        mapping = get_video_mapping()
-        video_id = mapping.get((canto, chapter))
-        
-        if not video_id:
-            return jsonify({
-                'success': False,
-                'error': f'No video found for Canto {canto}, Chapter {chapter}.'
-            })
-        
-        youtube_url = f'https://www.youtube.com/watch?v={video_id}'
-        
-        print(f"✅ Found video: {video_id}")
-        
-        # Just return the video URL - don't try to get transcript
-        return jsonify({
-            'success': True,
-            'video_id': video_id,
-            'youtube_url': youtube_url,
-            'message': f'Opening chapter commentary for Canto {canto}, Chapter {chapter}'
-        })
-        
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
 
 
 # ==================== TRANSLATION FUNCTIONS ====================
@@ -793,25 +753,27 @@ def open_youtube():
 
 @app.route('/get_chapter_meaning', methods=['POST'])
 def get_chapter_meaning_route():
-    """Get chapter commentary - opens video directly"""
+    """Get chapter commentary - just returns video URL"""
     try:
         data = request.json
         canto = int(data.get('canto', 1))
         chapter = int(data.get('chapter', 1))
         
-        print(f"📝 Chapter explanation request: Canto {canto} Chapter {chapter}")
+        print(f"📝 Chapter explanation: Canto {canto} Chapter {chapter}")
         
+        # Get video mapping
         mapping = get_video_mapping()
         video_id = mapping.get((canto, chapter))
         
         if not video_id:
+            print(f"❌ No video found")
             return jsonify({
                 'success': False,
                 'error': f'No video found for Canto {canto}, Chapter {chapter}'
             })
         
         youtube_url = f'https://www.youtube.com/watch?v={video_id}'
-        print(f"✅ Opening commentary: {video_id}")
+        print(f"✅ Found video: {video_id}")
         
         return jsonify({
             'success': True,
@@ -821,14 +783,13 @@ def get_chapter_meaning_route():
         })
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Error in get_chapter_meaning_route: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)
         })
-
 
 @app.route('/test_simple/<video_id>', methods=['GET'])
 def test_simple(video_id):
