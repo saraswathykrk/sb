@@ -1161,80 +1161,84 @@ def translate_text_cascade(text, source_lang='ta'):
 #         print(f"❌ Transcript error: {type(e).__name__}: {e}")
 #         return None
 
-def get_youtube_transcript(video_id):
-    """Fetch transcript from YouTube - multiple methods"""
-    try:
-        print(f"📺 Fetching transcript for: {video_id}")
+# def get_youtube_transcript(video_id):
+#     """Fetch transcript from YouTube - multiple methods"""
+#     try:
+#         print(f"📺 Fetching transcript for: {video_id}")
         
-        from langdetect import detect
+#         from langdetect import detect
         
-        # Method 1: Try yt-dlp (BEST for extracting subtitles)
-        print(f"   Method 1: yt-dlp subtitle extraction...")
-        result = get_youtube_transcript_ytdlp(video_id)
-        if result:
-            return result
+#         # Method 1: Try yt-dlp (BEST for extracting subtitles)
+#         print(f"   Method 1: yt-dlp subtitle extraction...")
+#         result = get_youtube_transcript_ytdlp(video_id)
+#         if result:
+#             return result
         
-        # Method 2: Try youtube-transcript-api
-        try:
-            print(f"   Method 2: youtube-transcript-api...")
-            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+#         # Method 2: Try youtube-transcript-api
+#         try:
+#             print(f"   Method 2: youtube-transcript-api...")
+#             transcript = YouTubeTranscriptApi.get_transcript(video_id)
             
-            if transcript:
-                full_text = ' '.join([seg['text'].strip() for seg in transcript if seg.get('text')])
+#             if transcript:
+#                 full_text = ' '.join([seg['text'].strip() for seg in transcript if seg.get('text')])
                 
-                if full_text and len(full_text) > 10:
-                    try:
-                        detected_lang = detect(full_text[:500])
-                    except:
-                        detected_lang = 'ta'
+#                 if full_text and len(full_text) > 10:
+#                     try:
+#                         detected_lang = detect(full_text[:500])
+#                     except:
+#                         detected_lang = 'ta'
                     
-                    print(f"✅ Method 2 success: {len(full_text)} chars")
+#                     print(f"✅ Method 2 success: {len(full_text)} chars")
                     
-                    return {
-                        'text': full_text,
-                        'language': detected_lang,
-                        'segments': transcript
-                    }
-        except Exception as e:
-            print(f"⚠️ Method 2 failed: {type(e).__name__}")
+#                     return {
+#                         'text': full_text,
+#                         'language': detected_lang,
+#                         'segments': transcript
+#                     }
+#         except Exception as e:
+#             print(f"⚠️ Method 2 failed: {type(e).__name__}")
         
-        # Method 3: Try with language codes
-        for lang_code in ['ta', 'hi', 'en']:
-            try:
-                print(f"   Method 3: Trying lang {lang_code}...")
-                transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[lang_code])
+#         # Method 3: Try with language codes
+#         for lang_code in ['ta', 'hi', 'en']:
+#             try:
+#                 print(f"   Method 3: Trying lang {lang_code}...")
+#                 transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[lang_code])
                 
-                if transcript:
-                    full_text = ' '.join([seg['text'].strip() for seg in transcript if seg.get('text')])
+#                 if transcript:
+#                     full_text = ' '.join([seg['text'].strip() for seg in transcript if seg.get('text')])
                     
-                    if full_text and len(full_text) > 10:
-                        try:
-                            detected_lang = detect(full_text[:500])
-                        except:
-                            detected_lang = lang_code
+#                     if full_text and len(full_text) > 10:
+#                         try:
+#                             detected_lang = detect(full_text[:500])
+#                         except:
+#                             detected_lang = lang_code
                         
-                        print(f"✅ Method 3 success: {len(full_text)} chars")
+#                         print(f"✅ Method 3 success: {len(full_text)} chars")
                         
-                        return {
-                            'text': full_text,
-                            'language': detected_lang,
-                            'segments': transcript
-                        }
-            except:
-                continue
+#                         return {
+#                             'text': full_text,
+#                             'language': detected_lang,
+#                             'segments': transcript
+#                         }
+#             except:
+#                 continue
         
-        # Method 4: Direct HTML scraping
-        print(f"   Method 4: Direct HTML scraping...")
-        result = get_youtube_transcript_direct(video_id)
-        if result:
-            return result
+#         # Method 4: Direct HTML scraping
+#         print(f"   Method 4: Direct HTML scraping...")
+#         result = get_youtube_transcript_direct(video_id)
+#         if result:
+#             return result
         
-        print(f"❌ All methods failed for video: {video_id}")
-        return None
+#         print(f"❌ All methods failed for video: {video_id}")
+#         return None
         
-    except Exception as e:
-        print(f"❌ Transcript error: {e}")
-        return None
+#     except Exception as e:
+#         print(f"❌ Transcript error: {e}")
+#         return None
+
+def get_youtube_transcript(video_id):
+    """Main transcript fetching function"""
+    return extract_subtitles_comprehensive(video_id)
 
 # Routes
 @app.before_request
@@ -1694,7 +1698,307 @@ def get_youtube_transcript_direct(video_id):
         print(f"     Direct method error: {e}")
         return None
 
+
+def extract_subtitles_comprehensive(video_id):
+    """Try EVERY method to extract subtitles - comprehensive approach"""
+    
+    print(f"\n{'='*70}")
+    print(f"COMPREHENSIVE SUBTITLE EXTRACTION FOR: {video_id}")
+    print(f"{'='*70}\n")
+    
+    video_url = f"https://www.youtube.com/watch?v={video_id}"
+    
+    # ==================== METHOD 1: yt-dlp with verbose listing ====================
+    print(f"🔍 METHOD 1: Detailed yt-dlp subtitle check")
+    try:
+        cmd = ['yt-dlp', '--list-subs', '--verbose', video_url]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         
+        print("Available subtitles (full output):")
+        print(result.stdout)
+        
+        if result.stderr:
+            print("Stderr:")
+            print(result.stderr[:1000])
+            
+    except Exception as e:
+        print(f"❌ Method 1 error: {e}")
+    
+    # ==================== METHOD 2: Try to download ANY subtitle ====================
+    print(f"\n🔍 METHOD 2: Force download with all options")
+    try:
+        import tempfile
+        temp_dir = tempfile.mkdtemp()
+        
+        # Try with ALL subtitle options enabled
+        cmd = [
+            'yt-dlp',
+            '--write-auto-sub',
+            '--write-sub',
+            '--all-subs',  # Download ALL available subtitles
+            '--skip-download',
+            '--output', os.path.join(temp_dir, 'subtitle'),
+            video_url
+        ]
+        
+        print(f"Command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        
+        print(f"Return code: {result.returncode}")
+        print(f"Stdout: {result.stdout[:500]}")
+        
+        # Check what files were created
+        import glob
+        all_files = glob.glob(os.path.join(temp_dir, '*'))
+        
+        if all_files:
+            print(f"✅ Files created: {len(all_files)}")
+            for f in all_files:
+                print(f"   - {os.path.basename(f)} ({os.path.getsize(f)} bytes)")
+                
+                # Try to read and parse each file
+                try:
+                    with open(f, 'r', encoding='utf-8', errors='ignore') as file:
+                        content = file.read()
+                        
+                        # Parse subtitle content
+                        text = parse_subtitle_content(content)
+                        
+                        if text and len(text) > 50:
+                            print(f"   ✅ SUCCESS! Extracted {len(text)} chars from {os.path.basename(f)}")
+                            
+                            # Detect language
+                            try:
+                                from langdetect import detect
+                                lang = detect(text[:500])
+                            except:
+                                lang = 'ta'
+                            
+                            # Cleanup
+                            import shutil
+                            shutil.rmtree(temp_dir, ignore_errors=True)
+                            
+                            return {
+                                'text': text,
+                                'language': lang,
+                                'method': 'yt-dlp --all-subs',
+                                'segments': []
+                            }
+                except Exception as e:
+                    print(f"   ⚠️ Error reading {os.path.basename(f)}: {e}")
+        else:
+            print(f"❌ No files created")
+        
+        # Cleanup
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        
+    except Exception as e:
+        print(f"❌ Method 2 error: {e}")
+    
+    # ==================== METHOD 3: YouTube timedtext API ====================
+    print(f"\n🔍 METHOD 3: Direct YouTube timedtext API")
+    try:
+        import urllib.request
+        import json
+        import re
+        from html import unescape
+        
+        # Get video page to find caption tracks
+        print(f"Fetching video page...")
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept-Language': 'en-US,en;q=0.9,ta;q=0.8,hi;q=0.7'
+        }
+        
+        req = urllib.request.Request(video_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as response:
+            html = response.read().decode('utf-8')
+        
+        # Find all caption track data
+        patterns = [
+            r'"captionTracks":\s*(\[.*?\])',
+            r'"captions":\s*\{[^}]*"playerCaptionsTracklistRenderer":\s*\{[^}]*"captionTracks":\s*(\[.*?\])',
+        ]
+        
+        caption_tracks = None
+        for pattern in patterns:
+            match = re.search(pattern, html)
+            if match:
+                try:
+                    caption_tracks = json.loads(match.group(1))
+                    print(f"✅ Found caption tracks using pattern")
+                    break
+                except:
+                    continue
+        
+        if caption_tracks:
+            print(f"Available caption tracks: {len(caption_tracks)}")
+            
+            for i, track in enumerate(caption_tracks):
+                lang_code = track.get('languageCode', 'unknown')
+                lang_name = track.get('name', {}).get('simpleText', 'Unknown')
+                base_url = track.get('baseUrl', '')
+                is_auto = track.get('kind', '') == 'asr'
+                
+                print(f"  Track {i+1}: {lang_name} ({lang_code}) {'[auto]' if is_auto else '[manual]'}")
+                
+                if base_url:
+                    try:
+                        print(f"    Fetching from: {base_url[:80]}...")
+                        
+                        req = urllib.request.Request(base_url, headers=headers)
+                        with urllib.request.urlopen(req, timeout=30) as response:
+                            caption_data = response.read().decode('utf-8')
+                        
+                        # Parse the caption data (usually XML or JSON)
+                        text = parse_subtitle_content(caption_data)
+                        
+                        if text and len(text) > 50:
+                            print(f"    ✅ SUCCESS! Extracted {len(text)} chars")
+                            
+                            try:
+                                from langdetect import detect
+                                detected_lang = detect(text[:500])
+                            except:
+                                detected_lang = lang_code
+                            
+                            return {
+                                'text': text,
+                                'language': detected_lang,
+                                'method': 'YouTube timedtext API',
+                                'segments': []
+                            }
+                        else:
+                            print(f"    ⚠️ Text too short: {len(text) if text else 0} chars")
+                            
+                    except Exception as e:
+                        print(f"    ❌ Error fetching track: {e}")
+        else:
+            print(f"❌ No caption tracks found in HTML")
+    
+    except Exception as e:
+        print(f"❌ Method 3 error: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # ==================== METHOD 4: youtube-transcript-api with retries ====================
+    print(f"\n🔍 METHOD 4: youtube-transcript-api (all languages)")
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        
+        # Get list of all available transcripts
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        
+        print(f"Transcripts found:")
+        for transcript in transcript_list:
+            print(f"  - {transcript.language} ({transcript.language_code}) {'[auto]' if transcript.is_generated else '[manual]'}")
+        
+        # Try to fetch ANY transcript
+        for transcript in transcript_list:
+            try:
+                print(f"  Trying to fetch: {transcript.language_code}...")
+                segments = transcript.fetch()
+                
+                if segments:
+                    full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
+                    
+                    if len(full_text) > 50:
+                        print(f"  ✅ SUCCESS! Extracted {len(full_text)} chars")
+                        
+                        try:
+                            from langdetect import detect
+                            lang = detect(full_text[:500])
+                        except:
+                            lang = transcript.language_code
+                        
+                        return {
+                            'text': full_text,
+                            'language': lang,
+                            'method': 'youtube-transcript-api',
+                            'segments': segments
+                        }
+            except Exception as e:
+                print(f"  ⚠️ Error: {e}")
+    
+    except Exception as e:
+        print(f"❌ Method 4 error: {e}")
+    
+    print(f"\n{'='*70}")
+    print(f"❌ ALL METHODS FAILED - NO SUBTITLES EXTRACTED")
+    print(f"{'='*70}\n")
+    
+    return None
+
+
+def parse_subtitle_content(content):
+    """Parse subtitle content from various formats (VTT, XML, JSON, SRT)"""
+    import re
+    from html import unescape
+    
+    if not content:
+        return None
+    
+    text_lines = []
+    
+    # Try XML format (YouTube timedtext)
+    if '<text' in content or '<transcript' in content:
+        pattern = r'<text[^>]*>(.*?)</text>'
+        matches = re.findall(pattern, content, re.DOTALL)
+        for match in matches:
+            clean = re.sub(r'<[^>]+>', '', match)
+            clean = unescape(clean)
+            if clean.strip():
+                text_lines.append(clean.strip())
+    
+    # Try VTT format
+    elif 'WEBVTT' in content or '-->' in content:
+        lines = content.split('\n')
+        for line in lines:
+            line = line.strip()
+            if (line and 
+                not line.startswith('WEBVTT') and
+                not line.startswith('Kind:') and
+                not line.startswith('Language:') and
+                not '-->' in line and
+                not line.isdigit() and
+                len(line) > 2):
+                clean = re.sub(r'<[^>]+>', '', line)
+                if clean.strip():
+                    text_lines.append(clean.strip())
+    
+    # Try JSON format
+    elif content.startswith('{') or content.startswith('['):
+        try:
+            import json
+            data = json.loads(content)
+            
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict):
+                        text = item.get('text', '') or item.get('content', '') or item.get('snippet', '')
+                        if text:
+                            text_lines.append(text.strip())
+            elif isinstance(data, dict):
+                if 'events' in data:
+                    for event in data.get('events', []):
+                        if 'segs' in event:
+                            for seg in event['segs']:
+                                if 'utf8' in seg:
+                                    text_lines.append(seg['utf8'].strip())
+        except:
+            pass
+    
+    # Try SRT format
+    elif re.search(r'\d+\n\d{2}:\d{2}:\d{2}', content):
+        lines = content.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and not line.isdigit() and not re.match(r'\d{2}:\d{2}:\d{2}', line):
+                text_lines.append(line)
+    
+    return ' '.join(text_lines) if text_lines else None
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5019))
     app.run(debug=False, host='0.0.0.0', port=port)
