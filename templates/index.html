@@ -622,7 +622,12 @@
                 return;
             }
             
-            resultDiv.innerHTML = '<div class="loading">Finding video...</div>';
+            // Disable button and show loading
+            youtubeBtn.disabled = true;
+            youtubeBtn.style.opacity = '0.6';
+            youtubeBtn.innerHTML = '⏳ Loading...';
+            
+            resultDiv.innerHTML = '<div class="loading">🔍 Finding video...</div>';
             
             try {
                 const response = await fetch('/open_youtube', {
@@ -633,10 +638,9 @@
                     body: JSON.stringify({ canto, chapter })
                 });
                 
-                // Check if response is JSON
                 const contentType = response.headers.get('content-type');
                 if (!contentType || !contentType.includes('application/json')) {
-                    throw new Error('Server returned an error page. Please check the logs.');
+                    throw new Error('Server error. Check logs.');
                 }
                 
                 const data = await response.json();
@@ -654,11 +658,16 @@
             } catch (error) {
                 console.error('Error:', error);
                 showResult('error', 'Error: ' + error.message);
+            } finally {
+                // Re-enable button
+                youtubeBtn.disabled = false;
+                youtubeBtn.style.opacity = '1';
+                youtubeBtn.innerHTML = '🎬 Watch Chapter on YouTube';
             }
         });
 
         // Chapter Explanation Button
-        chapterMeaningBtn.addEventListener('click', async () => {
+        explanationBtn.addEventListener('click', async () => {
             const canto = document.getElementById('canto').value;
             const chapter = document.getElementById('chapter').value;
             
@@ -667,7 +676,12 @@
                 return;
             }
             
-            resultDiv.innerHTML = '<div class="loading">Finding chapter commentary...</div>';
+            // Disable button and show loading
+            explanationBtn.disabled = true;
+            explanationBtn.style.opacity = '0.6';
+            explanationBtn.innerHTML = '⏳ Loading...';
+            
+            resultDiv.innerHTML = '<div class="loading">🔍 Finding commentary...</div>';
             
             try {
                 const response = await fetch('/get_chapter_meaning', {
@@ -678,10 +692,9 @@
                     body: JSON.stringify({ canto, chapter })
                 });
                 
-                // Check if response is JSON
                 const contentType = response.headers.get('content-type');
                 if (!contentType || !contentType.includes('application/json')) {
-                    throw new Error('Server returned an error page. Please check the logs.');
+                    throw new Error('Server error. Check logs.');
                 }
                 
                 const data = await response.json();
@@ -689,7 +702,7 @@
                 if (data.success) {
                     window.open(data.youtube_url, '_blank');
                     showResult('success', 
-                        `✅ ${data.message || 'Opening chapter commentary...'}<br><br>` +
+                        `✅ ${data.message || 'Opening commentary...'}<br><br>` +
                         `<button class="reopen-btn" onclick="window.open('${data.youtube_url}', '_blank')">` +
                         `🎬 Reopen Video</button>`
                     );
@@ -699,8 +712,17 @@
             } catch (error) {
                 console.error('Error:', error);
                 showResult('error', 'Error: ' + error.message);
+            } finally {
+                // Re-enable button
+                explanationBtn.disabled = false;
+                explanationBtn.style.opacity = '1';
+                explanationBtn.innerHTML = '📝 Chapter Explanation';
             }
         });
+
+
+
+
         // Close modal
         document.getElementById('closeModal').addEventListener('click', () => {
             document.getElementById('chapterModal').style.display = 'none';
