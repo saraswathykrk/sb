@@ -1905,8 +1905,144 @@ def get_youtube_transcript_direct(video_id):
         print(f"     Direct method error: {e}")
         return None
 
+# def extract_captions_with_playwright(video_id):
+#     """Extract captions by automating CC button click"""
+#     try:
+#         print(f"🎬 Browser automation for: {video_id}")
+        
+#         from playwright.sync_api import sync_playwright
+#         import time
+        
+#         video_url = f"https://www.youtube.com/watch?v={video_id}"
+#         caption_data = []
+        
+#         with sync_playwright() as p:
+#             # Launch browser
+#             browser = p.chromium.launch(headless=True)
+#             context = browser.new_context(
+#                 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+#                 locale='en-US'
+#             )
+#             page = context.new_page()
+            
+#             # Intercept network requests to capture caption data
+#             def handle_response(response):
+#                 if 'timedtext' in response.url or 'caption' in response.url:
+#                     try:
+#                         print(f"   📥 Captured caption URL: {response.url[:100]}...")
+#                         text = response.text()
+#                         caption_data.append({
+#                             'url': response.url,
+#                             'data': text
+#                         })
+#                     except Exception as e:
+#                         print(f"   ⚠️ Error capturing response: {e}")
+            
+#             page.on('response', handle_response)
+            
+#             print(f"   Loading video page...")
+#             page.goto(video_url, wait_until='domcontentloaded', timeout=60000)
+            
+#             # Wait for player to load
+#             time.sleep(5)
+            
+#             # Try to find and click CC button
+#             try:
+#                 print(f"   Looking for CC button...")
+                
+#                 # Wait for player controls
+#                 page.wait_for_selector('.ytp-chrome-bottom', timeout=10000)
+                
+#                 # Try different CC button selectors
+#                 cc_selectors = [
+#                     'button.ytp-subtitles-button',
+#                     'button[aria-label*="Subtitles"]',
+#                     'button[aria-label*="Captions"]',
+#                     '.ytp-subtitles-button',
+#                 ]
+                
+#                 clicked = False
+#                 for selector in cc_selectors:
+#                     try:
+#                         element = page.query_selector(selector)
+#                         if element:
+#                             print(f"   Found CC button: {selector}")
+                            
+#                             # Check if captions are already on
+#                             aria_pressed = element.get_attribute('aria-pressed')
+#                             if aria_pressed != 'true':
+#                                 print(f"   Clicking CC button...")
+#                                 element.click()
+#                                 clicked = True
+#                                 time.sleep(3)  # Wait for captions to load
+#                                 break
+#                             else:
+#                                 print(f"   Captions already enabled")
+#                                 clicked = True
+#                                 break
+#                     except Exception as e:
+#                         continue
+                
+#                 if not clicked:
+#                     print(f"   ⚠️ Could not find/click CC button")
+                
+#                 # Wait a bit more for any delayed network requests
+#                 time.sleep(2)
+                
+#             except Exception as e:
+#                 print(f"   ⚠️ Error with CC button: {e}")
+            
+#             # Alternative: Try to extract captions from DOM
+#             if not caption_data:
+#                 print(f"   Trying to extract from DOM...")
+#                 try:
+#                     # Look for caption elements in the player
+#                     caption_elements = page.query_selector_all('.ytp-caption-segment')
+#                     if caption_elements:
+#                         print(f"   Found {len(caption_elements)} caption elements")
+#                 except:
+#                     pass
+            
+#             browser.close()
+        
+#         # Process captured caption data
+#         if caption_data:
+#             print(f"✅ Captured {len(caption_data)} caption responses")
+            
+#             for item in caption_data:
+#                 data = item['data']
+                
+#                 # Try to parse the caption data
+#                 text = parse_subtitle_content(data)
+                
+#                 if text and len(text) > 50:
+#                     print(f"✅ Successfully extracted {len(text)} chars")
+                    
+#                     # Detect language
+#                     try:
+#                         from langdetect import detect
+#                         lang = detect(text[:500])
+#                     except:
+#                         lang = 'unknown'
+                    
+#                     return {
+#                         'text': text,
+#                         'language': lang,
+#                         'method': 'Playwright browser automation',
+#                         'segments': []
+#                     }
+        
+#         print(f"❌ No captions extracted via browser automation")
+#         return None
+        
+#     except Exception as e:
+#         print(f"❌ Browser automation error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return None
+
 def extract_captions_with_playwright(video_id):
-    """Extract captions by automating CC button click"""
+    """Extract captions by automating CC button click - improved"""
     try:
         print(f"🎬 Browser automation for: {video_id}")
         
@@ -1917,91 +2053,163 @@ def extract_captions_with_playwright(video_id):
         caption_data = []
         
         with sync_playwright() as p:
-            # Launch browser
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                locale='en-US'
+            # Launch browser with more realistic settings
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    '--disable-blink-features=AutomationControlled',
+                    '--no-sandbox'
+                ]
             )
+            
+            context = browser.new_context(
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                locale='en-US',
+                viewport={'width': 1920, 'height': 1080}
+            )
+            
             page = context.new_page()
             
             # Intercept network requests to capture caption data
             def handle_response(response):
-                if 'timedtext' in response.url or 'caption' in response.url:
+                url = response.url
+                if 'timedtext' in url or 'api/timedtext' in url:
                     try:
-                        print(f"   📥 Captured caption URL: {response.url[:100]}...")
+                        print(f"   📥 Captured caption URL")
                         text = response.text()
-                        caption_data.append({
-                            'url': response.url,
-                            'data': text
-                        })
+                        if len(text) > 100:
+                            caption_data.append(text)
                     except Exception as e:
-                        print(f"   ⚠️ Error capturing response: {e}")
+                        pass
             
             page.on('response', handle_response)
             
             print(f"   Loading video page...")
-            page.goto(video_url, wait_until='domcontentloaded', timeout=60000)
+            page.goto(video_url, wait_until='domcontentloaded', timeout=90000)
             
-            # Wait for player to load
-            time.sleep(5)
+            # Wait longer for player to fully load
+            print(f"   Waiting for player to load...")
+            time.sleep(10)
             
-            # Try to find and click CC button
+            # Try to interact with player to trigger caption loading
             try:
-                print(f"   Looking for CC button...")
+                print(f"   Looking for player...")
                 
-                # Wait for player controls
-                page.wait_for_selector('.ytp-chrome-bottom', timeout=10000)
-                
-                # Try different CC button selectors
-                cc_selectors = [
-                    'button.ytp-subtitles-button',
-                    'button[aria-label*="Subtitles"]',
-                    'button[aria-label*="Captions"]',
-                    '.ytp-subtitles-button',
+                # Try to find the video player element
+                player_selectors = [
+                    '#movie_player',
+                    '.html5-video-player',
+                    'video'
                 ]
                 
-                clicked = False
-                for selector in cc_selectors:
+                player_found = False
+                for selector in player_selectors:
                     try:
-                        element = page.query_selector(selector)
-                        if element:
-                            print(f"   Found CC button: {selector}")
-                            
-                            # Check if captions are already on
-                            aria_pressed = element.get_attribute('aria-pressed')
-                            if aria_pressed != 'true':
-                                print(f"   Clicking CC button...")
-                                element.click()
-                                clicked = True
-                                time.sleep(3)  # Wait for captions to load
-                                break
-                            else:
-                                print(f"   Captions already enabled")
-                                clicked = True
-                                break
-                    except Exception as e:
+                        if page.query_selector(selector):
+                            print(f"   Found player: {selector}")
+                            player_found = True
+                            break
+                    except:
                         continue
                 
-                if not clicked:
-                    print(f"   ⚠️ Could not find/click CC button")
+                if not player_found:
+                    print(f"   ⚠️ Player not found")
                 
-                # Wait a bit more for any delayed network requests
-                time.sleep(2)
+                # Try to find and click CC button - multiple approaches
+                print(f"   Looking for CC button...")
+                
+                # Approach 1: Try clicking by JavaScript
+                try:
+                    js_code = """
+                    const buttons = document.querySelectorAll('button');
+                    for (let btn of buttons) {
+                        const ariaLabel = btn.getAttribute('aria-label') || '';
+                        const className = btn.className || '';
+                        if (ariaLabel.toLowerCase().includes('subtitle') || 
+                            ariaLabel.toLowerCase().includes('caption') ||
+                            className.includes('ytp-subtitles-button')) {
+                            btn.click();
+                            return 'clicked';
+                        }
+                    }
+                    return 'not found';
+                    """
+                    
+                    result = page.evaluate(js_code)
+                    print(f"   JS click result: {result}")
+                    
+                    if result == 'clicked':
+                        time.sleep(5)  # Wait for captions to load
+                        
+                except Exception as e:
+                    print(f"   ⚠️ JS click failed: {e}")
+                
+                # Approach 2: Try Playwright click
+                cc_selectors = [
+                    'button.ytp-subtitles-button',
+                    'button[aria-label*="ubtitle"]',
+                    'button[aria-label*="aption"]',
+                    '.ytp-subtitles-button'
+                ]
+                
+                for selector in cc_selectors:
+                    try:
+                        element = page.wait_for_selector(selector, timeout=5000, state='visible')
+                        if element:
+                            print(f"   Found CC button: {selector}")
+                            element.click()
+                            time.sleep(5)
+                            break
+                    except:
+                        continue
+                
+                # Wait for any network requests
+                time.sleep(3)
                 
             except Exception as e:
-                print(f"   ⚠️ Error with CC button: {e}")
+                print(f"   ⚠️ Button interaction error: {e}")
             
-            # Alternative: Try to extract captions from DOM
+            # Try to extract captions from page source as fallback
             if not caption_data:
-                print(f"   Trying to extract from DOM...")
+                print(f"   Trying to extract from page HTML...")
                 try:
-                    # Look for caption elements in the player
-                    caption_elements = page.query_selector_all('.ytp-caption-segment')
-                    if caption_elements:
-                        print(f"   Found {len(caption_elements)} caption elements")
-                except:
-                    pass
+                    html = page.content()
+                    
+                    # Look for caption data in page source
+                    import re
+                    import json
+                    
+                    # Try to find captionTracks in the HTML
+                    patterns = [
+                        r'"captionTracks":\s*(\[.*?\])',
+                        r'"captions".*?"captionTracks":\s*(\[.*?\])'
+                    ]
+                    
+                    for pattern in patterns:
+                        matches = re.findall(pattern, html, re.DOTALL)
+                        for match in matches:
+                            try:
+                                tracks = json.loads(match)
+                                if tracks and len(tracks) > 0:
+                                    # Found caption track URLs
+                                    for track in tracks:
+                                        base_url = track.get('baseUrl', '')
+                                        if base_url:
+                                            print(f"   Found caption track in HTML")
+                                            # Fetch the caption data
+                                            try:
+                                                caption_response = page.request.get(base_url, timeout=30000)
+                                                if caption_response.ok:
+                                                    caption_text = caption_response.text()
+                                                    if len(caption_text) > 100:
+                                                        caption_data.append(caption_text)
+                                                        print(f"   ✅ Fetched caption from track URL")
+                                            except:
+                                                pass
+                            except:
+                                continue
+                except Exception as e:
+                    print(f"   ⚠️ HTML extraction error: {e}")
             
             browser.close()
         
@@ -2009,14 +2217,12 @@ def extract_captions_with_playwright(video_id):
         if caption_data:
             print(f"✅ Captured {len(caption_data)} caption responses")
             
-            for item in caption_data:
-                data = item['data']
-                
-                # Try to parse the caption data
+            for data in caption_data:
+                # Parse the caption content
                 text = parse_subtitle_content(data)
                 
-                if text and len(text) > 50:
-                    print(f"✅ Successfully extracted {len(text)} chars")
+                if text and len(text) > 100:
+                    print(f"✅ Extracted {len(text)} chars")
                     
                     # Detect language
                     try:
@@ -2028,7 +2234,7 @@ def extract_captions_with_playwright(video_id):
                     return {
                         'text': text,
                         'language': lang,
-                        'method': 'Playwright browser automation',
+                        'method': 'Playwright automation',
                         'segments': []
                     }
         
@@ -2040,7 +2246,7 @@ def extract_captions_with_playwright(video_id):
         import traceback
         traceback.print_exc()
         return None
-
+        
 def extract_subtitles_comprehensive(video_id):
     """Try EVERY method to extract subtitles - comprehensive approach"""
     
