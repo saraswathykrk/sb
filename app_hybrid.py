@@ -1240,116 +1240,116 @@ def translate_text_cascade(text, source_lang='ta'):
 #     """Main transcript fetching function"""
 #     return extract_subtitles_comprehensive(video_id)
 
-def get_youtube_transcript(video_id):
-    """Fetch transcript with auto-translation support"""
-    try:
-        print(f"📺 Fetching transcript for: {video_id}")
+# def get_youtube_transcript(video_id):
+#     """Fetch transcript with auto-translation support"""
+#     try:
+#         print(f"📺 Fetching transcript for: {video_id}")
         
-        from youtube_transcript_api import YouTubeTranscriptApi
-        from langdetect import detect
+#         from youtube_transcript_api import YouTubeTranscriptApi
+#         from langdetect import detect
         
-        # Step 1: List all available transcripts
-        try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+#         # Step 1: List all available transcripts
+#         try:
+#             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             
-            print(f"✅ Transcripts available:")
-            available_transcripts = []
-            for t in transcript_list:
-                info = f"{t.language} ({t.language_code})"
-                if t.is_generated:
-                    info += " [auto]"
-                print(f"   - {info}")
-                available_transcripts.append(t)
+#             print(f"✅ Transcripts available:")
+#             available_transcripts = []
+#             for t in transcript_list:
+#                 info = f"{t.language} ({t.language_code})"
+#                 if t.is_generated:
+#                     info += " [auto]"
+#                 print(f"   - {info}")
+#                 available_transcripts.append(t)
             
-            if not available_transcripts:
-                print(f"❌ No transcripts found")
-                return None
+#             if not available_transcripts:
+#                 print(f"❌ No transcripts found")
+#                 return None
             
-            # Step 2: Try to get English transcript directly
-            try:
-                print(f"   Trying direct English transcript...")
-                transcript = transcript_list.find_transcript(['en'])
-                segments = transcript.fetch()
+#             # Step 2: Try to get English transcript directly
+#             try:
+#                 print(f"   Trying direct English transcript...")
+#                 transcript = transcript_list.find_transcript(['en'])
+#                 segments = transcript.fetch()
                 
-                full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
+#                 full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
                 
-                if full_text and len(full_text) > 50:
-                    print(f"✅ Found English transcript: {len(full_text)} chars")
-                    return {
-                        'text': full_text,
-                        'language': 'en',
-                        'method': 'Direct English',
-                        'segments': segments
-                    }
-            except:
-                print(f"   No direct English transcript")
+#                 if full_text and len(full_text) > 50:
+#                     print(f"✅ Found English transcript: {len(full_text)} chars")
+#                     return {
+#                         'text': full_text,
+#                         'language': 'en',
+#                         'method': 'Direct English',
+#                         'segments': segments
+#                     }
+#             except:
+#                 print(f"   No direct English transcript")
             
-            # Step 3: Get any available transcript and translate to English
-            print(f"   Trying auto-translation to English...")
+#             # Step 3: Get any available transcript and translate to English
+#             print(f"   Trying auto-translation to English...")
             
-            for transcript in available_transcripts:
-                try:
-                    print(f"   Attempting: {transcript.language_code} → English")
+#             for transcript in available_transcripts:
+#                 try:
+#                     print(f"   Attempting: {transcript.language_code} → English")
                     
-                    # Translate to English
-                    translated = transcript.translate('en')
-                    segments = translated.fetch()
+#                     # Translate to English
+#                     translated = transcript.translate('en')
+#                     segments = translated.fetch()
                     
-                    full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
+#                     full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
                     
-                    if full_text and len(full_text) > 50:
-                        print(f"✅ SUCCESS! Translated {transcript.language_code} → English: {len(full_text)} chars")
-                        print(f"   Preview: {full_text[:200]}...")
+#                     if full_text and len(full_text) > 50:
+#                         print(f"✅ SUCCESS! Translated {transcript.language_code} → English: {len(full_text)} chars")
+#                         print(f"   Preview: {full_text[:200]}...")
                         
-                        return {
-                            'text': full_text,
-                            'language': 'en',
-                            'original_language': transcript.language_code,
-                            'method': f'Auto-translated from {transcript.language}',
-                            'segments': segments
-                        }
+#                         return {
+#                             'text': full_text,
+#                             'language': 'en',
+#                             'original_language': transcript.language_code,
+#                             'method': f'Auto-translated from {transcript.language}',
+#                             'segments': segments
+#                         }
                     
-                except Exception as e:
-                    print(f"   ⚠️ Translation failed for {transcript.language_code}: {e}")
-                    continue
+#                 except Exception as e:
+#                     print(f"   ⚠️ Translation failed for {transcript.language_code}: {e}")
+#                     continue
             
-            # Step 4: If translation fails, get original text
-            print(f"   Translation failed, getting original text...")
+#             # Step 4: If translation fails, get original text
+#             print(f"   Translation failed, getting original text...")
             
-            for transcript in available_transcripts:
-                try:
-                    segments = transcript.fetch()
-                    full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
+#             for transcript in available_transcripts:
+#                 try:
+#                     segments = transcript.fetch()
+#                     full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
                     
-                    if full_text and len(full_text) > 50:
-                        try:
-                            detected_lang = detect(full_text[:500])
-                        except:
-                            detected_lang = transcript.language_code
+#                     if full_text and len(full_text) > 50:
+#                         try:
+#                             detected_lang = detect(full_text[:500])
+#                         except:
+#                             detected_lang = transcript.language_code
                         
-                        print(f"✅ Got original text in {transcript.language}: {len(full_text)} chars")
+#                         print(f"✅ Got original text in {transcript.language}: {len(full_text)} chars")
                         
-                        return {
-                            'text': full_text,
-                            'language': detected_lang,
-                            'method': f'Original {transcript.language}',
-                            'segments': segments
-                        }
-                except:
-                    continue
+#                         return {
+#                             'text': full_text,
+#                             'language': detected_lang,
+#                             'method': f'Original {transcript.language}',
+#                             'segments': segments
+#                         }
+#                 except:
+#                     continue
             
-            print(f"❌ All methods failed")
-            return None
+#             print(f"❌ All methods failed")
+#             return None
             
-        except Exception as e:
-            print(f"❌ Error listing transcripts: {e}")
-            return None
+#         except Exception as e:
+#             print(f"❌ Error listing transcripts: {e}")
+#             return None
         
-    except Exception as e:
-        print(f"❌ Transcript error: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+#     except Exception as e:
+#         print(f"❌ Transcript error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return None
 
 # Routes
 @app.before_request
@@ -1772,6 +1772,48 @@ def debug_test_video(canto, chapter):
             'traceback': traceback.format_exc()
         })
 
+def get_youtube_transcript(video_id):
+    """Fetch transcript - try browser automation first"""
+    try:
+        print(f"📺 Fetching transcript for: {video_id}")
+        
+        # METHOD 1: Browser automation (clicks CC button)
+        print(f"   Method 1: Playwright browser automation...")
+        result = extract_captions_with_playwright(video_id)
+        if result:
+            return result
+        
+        # METHOD 2: youtube-transcript-api (fallback)
+        print(f"   Method 2: youtube-transcript-api...")
+        from youtube_transcript_api import YouTubeTranscriptApi
+        
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            for transcript in transcript_list:
+                try:
+                    # Try to translate to English
+                    translated = transcript.translate('en')
+                    segments = translated.fetch()
+                    full_text = ' '.join([seg['text'].strip() for seg in segments if seg.get('text')])
+                    
+                    if full_text and len(full_text) > 50:
+                        return {
+                            'text': full_text,
+                            'language': 'en',
+                            'method': 'youtube-transcript-api',
+                            'segments': segments
+                        }
+                except:
+                    continue
+        except:
+            pass
+        
+        return None
+        
+    except Exception as e:
+        print(f"❌ All methods failed: {e}")
+        return None
 
 def get_youtube_transcript_direct(video_id):
     """Fetch transcript using direct YouTube approach - last resort"""
@@ -1863,6 +1905,141 @@ def get_youtube_transcript_direct(video_id):
         print(f"     Direct method error: {e}")
         return None
 
+def extract_captions_with_playwright(video_id):
+    """Extract captions by automating CC button click"""
+    try:
+        print(f"🎬 Browser automation for: {video_id}")
+        
+        from playwright.sync_api import sync_playwright
+        import time
+        
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        caption_data = []
+        
+        with sync_playwright() as p:
+            # Launch browser
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                locale='en-US'
+            )
+            page = context.new_page()
+            
+            # Intercept network requests to capture caption data
+            def handle_response(response):
+                if 'timedtext' in response.url or 'caption' in response.url:
+                    try:
+                        print(f"   📥 Captured caption URL: {response.url[:100]}...")
+                        text = response.text()
+                        caption_data.append({
+                            'url': response.url,
+                            'data': text
+                        })
+                    except Exception as e:
+                        print(f"   ⚠️ Error capturing response: {e}")
+            
+            page.on('response', handle_response)
+            
+            print(f"   Loading video page...")
+            page.goto(video_url, wait_until='domcontentloaded', timeout=60000)
+            
+            # Wait for player to load
+            time.sleep(5)
+            
+            # Try to find and click CC button
+            try:
+                print(f"   Looking for CC button...")
+                
+                # Wait for player controls
+                page.wait_for_selector('.ytp-chrome-bottom', timeout=10000)
+                
+                # Try different CC button selectors
+                cc_selectors = [
+                    'button.ytp-subtitles-button',
+                    'button[aria-label*="Subtitles"]',
+                    'button[aria-label*="Captions"]',
+                    '.ytp-subtitles-button',
+                ]
+                
+                clicked = False
+                for selector in cc_selectors:
+                    try:
+                        element = page.query_selector(selector)
+                        if element:
+                            print(f"   Found CC button: {selector}")
+                            
+                            # Check if captions are already on
+                            aria_pressed = element.get_attribute('aria-pressed')
+                            if aria_pressed != 'true':
+                                print(f"   Clicking CC button...")
+                                element.click()
+                                clicked = True
+                                time.sleep(3)  # Wait for captions to load
+                                break
+                            else:
+                                print(f"   Captions already enabled")
+                                clicked = True
+                                break
+                    except Exception as e:
+                        continue
+                
+                if not clicked:
+                    print(f"   ⚠️ Could not find/click CC button")
+                
+                # Wait a bit more for any delayed network requests
+                time.sleep(2)
+                
+            except Exception as e:
+                print(f"   ⚠️ Error with CC button: {e}")
+            
+            # Alternative: Try to extract captions from DOM
+            if not caption_data:
+                print(f"   Trying to extract from DOM...")
+                try:
+                    # Look for caption elements in the player
+                    caption_elements = page.query_selector_all('.ytp-caption-segment')
+                    if caption_elements:
+                        print(f"   Found {len(caption_elements)} caption elements")
+                except:
+                    pass
+            
+            browser.close()
+        
+        # Process captured caption data
+        if caption_data:
+            print(f"✅ Captured {len(caption_data)} caption responses")
+            
+            for item in caption_data:
+                data = item['data']
+                
+                # Try to parse the caption data
+                text = parse_subtitle_content(data)
+                
+                if text and len(text) > 50:
+                    print(f"✅ Successfully extracted {len(text)} chars")
+                    
+                    # Detect language
+                    try:
+                        from langdetect import detect
+                        lang = detect(text[:500])
+                    except:
+                        lang = 'unknown'
+                    
+                    return {
+                        'text': text,
+                        'language': lang,
+                        'method': 'Playwright browser automation',
+                        'segments': []
+                    }
+        
+        print(f"❌ No captions extracted via browser automation")
+        return None
+        
+    except Exception as e:
+        print(f"❌ Browser automation error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def extract_subtitles_comprehensive(video_id):
     """Try EVERY method to extract subtitles - comprehensive approach"""
